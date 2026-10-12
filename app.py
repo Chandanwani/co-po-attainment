@@ -37,11 +37,16 @@ from excel_export import (
 from docx_export import create_word_report
 from pdf_export import create_pdf_report
 
+import mimetypes
+mimetypes.add_type('text/css', '.css')
+mimetypes.add_type('application/javascript', '.js')
+
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 app = Flask(
     __name__,
     template_folder=os.path.join(BASE_DIR, 'templates'),
-    static_folder=os.path.join(BASE_DIR, 'static')
+    static_folder=os.path.join(BASE_DIR, 'static'),
+    static_url_path='/static'
 )
 app.secret_key = os.environ.get("FLASK_SECRET_KEY", "co_po_attainment_secret_key_2026")
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16 MB limit
@@ -144,6 +149,18 @@ def parse_uploaded_file(file_obj, filename: str) -> Tuple[List[str], List[List[s
         else:
             text = content.decode('utf-8', errors='ignore')
         return parse_delimited_or_matrix_text(text)
+
+
+@app.route('/static/<path:filename>')
+def serve_static(filename):
+    """Fallback static asset server guaranteeing correct CSS/JS MIME types on serverless runtimes."""
+    static_dir = os.path.join(BASE_DIR, 'static')
+    mimetype = None
+    if filename.endswith('.css'):
+        mimetype = 'text/css'
+    elif filename.endswith('.js'):
+        mimetype = 'application/javascript'
+    return send_from_directory(static_dir, filename, mimetype=mimetype)
 
 
 # =========================================================================
