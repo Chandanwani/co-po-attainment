@@ -52,6 +52,23 @@ app.secret_key = os.environ.get("FLASK_SECRET_KEY", "co_po_attainment_secret_key
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16 MB limit
 app.config['ALLOWED_EXTENSIONS'] = {'csv', 'tsv', 'txt', 'xlsx', 'xls'}
 
+
+class VercelPathMiddleware:
+    """Ensures incoming Vercel rewritten requests maintain their original URL path."""
+    def __init__(self, wsgi_app):
+        self.wsgi_app = wsgi_app
+
+    def __call__(self, environ, start_response):
+        matched_path = environ.get('HTTP_X_MATCHED_PATH') or environ.get('HTTP_X_VERCEL_FORWARDED_PATH')
+        if matched_path:
+            if '?' in matched_path:
+                matched_path = matched_path.split('?', 1)[0]
+            environ['PATH_INFO'] = matched_path
+        return self.wsgi_app(environ, start_response)
+
+
+app.wsgi_app = VercelPathMiddleware(app.wsgi_app)
+
 # Session store with disk backing for serverless (e.g. Vercel) persistence across invocations
 SESSION_STORAGE_DIR = os.path.join(tempfile.gettempdir(), 'co_po_sessions')
 os.makedirs(SESSION_STORAGE_DIR, exist_ok=True)
@@ -167,8 +184,10 @@ def serve_static(filename):
 # PAGE ROUTES
 # =========================================================================
 
-@app.route('/')
+@app.route('/api')
+@app.route('/api/index')
 @app.route('/teacher')
+@app.route('/')
 def page1_teacher():
     """Page 1: Teacher & Course information (NO NAVBAR)."""
     sid = get_session_id()
