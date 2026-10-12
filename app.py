@@ -1,0 +1,943 @@
+"""
+CO-PO Attainment Web Application
+Backend: Python Flask
+Features: Multi-format file parsing (CSV, TSV, XLSX, Pasted), strict OBE validations,
+Direct & Indirect Assessment, CO-PO Correlation Mapping, Multi-sheet Excel & Word exports.
+"""
+
+import os
+import io
+import re
+import csv
+import json
+import secrets
+import tempfile
+from typing import Dict, Any, List, Tuple
+from flask import (
+    Flask, render_template, request, jsonify, session,
+    send_file, redirect, url_for, abort, send_from_directory
+)
+from werkzeug.utils import secure_filename
+import openpyxl
+
+from calculations import (
+    validate_and_compute_direct,
+    validate_and_compute_indirect,
+    compute_weighted_co_attainment,
+    compute_po_attainment,
+    parse_delimited_or_matrix_text
+)
+from excel_export import (
+    create_complete_excel_report,
+    create_direct_only_excel,
+    create_indirect_only_excel,
+    create_copo_only_excel,
+    create_students_only_excel
+)
+from docx_export import create_word_report
+from pdf_export import create_pdf_report
+
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+app = Flask(
+    __name__,
+    template_folder=os.path.join(BASE_DIR, 'templates'),
+    static_folder=os.path.join(BASE_DIR, 'static')
+)
+app.secret_key = os.environ.get("FLASK_SECRET_KEY", "co_po_attainment_secret_key_2026")
+app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16 MB limit
+app.config['ALLOWED_EXTENSIONS'] = {'csv', 'tsv', 'txt', 'xlsx', 'xls'}
+
+# Session store with disk backing for serverless (e.g. Vercel) persistence across invocations
+SESSION_STORAGE_DIR = os.path.join(tempfile.gettempdir(), 'co_po_sessions')
+os.makedirs(SESSION_STORAGE_DIR, exist_ok=True)
+TEMP_DATA_STORE: Dict[str, Dict[str, Any]] = {}
+
+
+def load_session_state(sid: str) -> Dict[str, Any]:
+    """Retrieves session state from memory or disk cache."""
+    if sid in TEMP_DATA_STORE:
+        return TEMP_DATA_STORE[sid]
+    fpath = os.path.join(SESSION_STORAGE_DIR, f"{sid}.json")
+    if os.path.exists(fpath):
+        try:
+            with open(fpath, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+                TEMP_DATA_STORE[sid] = data
+                return data
+        except Exception:
+            pass
+    default_state = {
+        'teacher': {
+            'faculty_name': '',
+            'subject': '',
+            'class_name': '',
+            'division': '',
+            'semester': '',
+            'academic_year': ''
+        },
+        'direct_raw': None,
+        'direct_computed': None,
+        'indirect_raw': None,
+        'indirect_computed': None,
+        'weighted_computed': None,
+        'copo_mapping': None,
+        'copo_computed': None
+    }
+    TEMP_DATA_STORE[sid] = default_state
+    return default_state
+
+
+def save_session_state(sid: str):
+    """Saves session state to disk cache."""
+    data = TEMP_DATA_STORE.get(sid)
+    if data:
+        fpath = os.path.join(SESSION_STORAGE_DIR, f"{sid}.json")
+        try:
+            with open(fpath, 'w', encoding='utf-8') as f:
+                json.dump(data, f)
+        except Exception:
+            pass
+
+
+@app.after_request
+def persist_session_state(response):
+    """Automatically persists modified session state after every request."""
+    if 'sid' in session:
+        save_session_state(session['sid'])
+    return response
+
+
+def get_session_id() -> str:
+    if 'sid' not in session:
+        session['sid'] = secrets.token_hex(16)
+    sid = session['sid']
+    load_session_state(sid)
+    return sid
+
+
+def allowed_file(filename: str) -> bool:
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in app.config['ALLOWED_EXTENSIONS']
+
+
+def parse_uploaded_file(file_obj, filename: str) -> Tuple[List[str], List[List[str]]]:
+    """Parses uploaded file (CSV, TSV, TXT, XLSX) into headers and rows of strings."""
+    ext = filename.rsplit('.', 1)[1].lower()
+    
+    if ext in ['xlsx', 'xls']:
+        wb = openpyxl.load_workbook(file_obj, data_only=True)
+        sheet = wb.active
+        raw_rows = []
+        for row in sheet.iter_rows(values_only=True):
+            if any(cell is not None and str(cell).strip() != "" for cell in row):
+                raw_rows.append([str(c).strip() if c is not None else "" for c in row])
+        if not raw_rows:
+            return [], []
+        return raw_rows[0], raw_rows[1:]
+    else:
+        content = file_obj.read()
+        for encoding in ['utf-8', 'utf-8-sig', 'latin-1', 'cp1252']:
+            try:
+                text = content.decode(encoding)
+                break
+            except UnicodeDecodeError:
+                continue
+        else:
+            text = content.decode('utf-8', errors='ignore')
+        return parse_delimited_or_matrix_text(text)
+
+
+# =========================================================================
+# PAGE ROUTES
+# =========================================================================
+
+@app.route('/')
+@app.route('/teacher')
+def page1_teacher():
+    """Page 1: Teacher & Course information (NO NAVBAR)."""
+    sid = get_session_id()
+    teacher = TEMP_DATA_STORE[sid].get('teacher', {})
+    return render_template('page1_teacher.html', teacher=teacher, page_step=1)
+
+
+@app.route('/assessment')
+def page2_assessment():
+    """Page 2: Direct and indirect assessment data."""
+    sid = get_session_id()
+    teacher = TEMP_DATA_STORE[sid].get('teacher', {})
+    # Teacher must have faculty_name and subject
+    if not teacher.get('faculty_name') or not teacher.get('subject'):
+        return redirect(url_for('page1_teacher'))
+    return render_template('page2_assessment.html', teacher=teacher, page_step=2)
+
+
+@app.route('/copo')
+def page3_copo():
+    """Page 3: CO-PO mapping and PO attainment calculation."""
+    sid = get_session_id()
+    teacher = TEMP_DATA_STORE[sid].get('teacher', {})
+    if not teacher.get('faculty_name') or not teacher.get('subject'):
+        return redirect(url_for('page1_teacher'))
+    return render_template('page3_copo.html', teacher=teacher, page_step=3)
+
+
+@app.route('/report')
+def page4_report():
+    """Page 4: Final Comprehensive Report & Downloads."""
+    sid = get_session_id()
+    teacher = TEMP_DATA_STORE[sid].get('teacher', {})
+    if not teacher.get('faculty_name') or not teacher.get('subject'):
+        return redirect(url_for('page1_teacher'))
+    return render_template('page4_report.html', teacher=teacher, page_step=4)
+
+
+# =========================================================================
+# API ENDPOINTS
+# =========================================================================
+
+@app.route('/api/save-teacher', methods=['POST'])
+def api_save_teacher():
+    sid = get_session_id()
+    data = request.get_json(silent=True) or request.form.to_dict()
+    
+    faculty_name = data.get('faculty_name', '').strip()
+    subject = data.get('subject', '').strip()
+    
+    if not faculty_name or not subject:
+        return jsonify({'success': False, 'message': 'Faculty name and Subject are required.'}), 400
+
+    teacher_info = {
+        'faculty_name': faculty_name,
+        'subject': subject,
+        'class_name': data.get('class_name', '').strip(),
+        'division': data.get('division', '').strip(),
+        'semester': data.get('semester', '').strip(),
+        'academic_year': data.get('academic_year', '').strip()
+    }
+    TEMP_DATA_STORE[sid]['teacher'] = teacher_info
+    return jsonify({'success': True, 'teacher': teacher_info, 'redirect': url_for('page2_assessment')})
+
+
+@app.route('/api/upload-direct', methods=['POST'])
+def api_upload_direct():
+    """Parses uploaded file or pasted text for direct marks."""
+    sid = get_session_id()
+    
+    headers = []
+    rows = []
+    
+    if 'file' in request.files and request.files['file'].filename:
+        file = request.files['file']
+        if not allowed_file(file.filename):
+            return jsonify({'success': False, 'message': 'Unsupported file format. Please upload CSV, TSV, or XLSX.'}), 400
+        headers, rows = parse_uploaded_file(file.stream, secure_filename(file.filename))
+    elif 'pasted_text' in request.form and request.form['pasted_text'].strip():
+        headers, rows = parse_delimited_or_matrix_text(request.form['pasted_text'])
+    else:
+        return jsonify({'success': False, 'message': 'No file or pasted data provided.'}), 400
+
+    if not headers or not rows:
+        return jsonify({'success': False, 'message': 'The uploaded file or text is empty.'}), 400
+
+    # Clean headers
+    headers = [str(h).strip() for h in headers]
+
+    # Check if header row is actually numbers (headerless file)
+    def _is_number(s):
+        try:
+            float(str(s).strip())
+            return True
+        except (ValueError, TypeError):
+            return False
+
+    if headers and all(_is_number(h) for h in headers if h):
+        rows = [headers] + rows
+        headers = [f"Assessment_{i+1}" for i in range(len(headers))]
+
+    # Keyword lists for detection
+    roll_keywords = ['roll', 'seat', 'prn', 'reg', 'serial', 'urn', 'enroll', 'srno', 'rollno', 'student_id']
+    roll_exact = {'sr', 'sr.', 's.no', 's.no.', 'sno', 'no', '#', 'id', 'sr no', 'sr. no', 'roll no', 'roll no.', 'seat no', 'roll_no'}
+    name_keywords = ['name', 'student', 'candidate']
+    exam_keywords = ['test', 'exam', 'cce', 'ut', 'quiz', 'mark', 'score', 'assess', 'insem', 'prelim', 'sem', 'endsem', 'midsem', 'theory', 'practical', 'pr', 'oral', 'tw', 'termwork', 'co']
+
+    h_lower = [h.lower() for h in headers]
+    is_long_format = False
+    if len(headers) in [3, 4] and any(any(kw in h for kw in ['assess', 'exam', 'test']) for h in h_lower) and any(any(kw in h for kw in ['mark', 'score']) for h in h_lower):
+        is_long_format = True
+
+    column_configs = []
+    students_list = []
+
+    if is_long_format:
+        # Long format: find roll, name, exam, mark columns
+        roll_col = next((i for i, h in enumerate(h_lower) if any(kw in h for kw in roll_keywords) or h in roll_exact), None)
+        name_col = next((i for i, h in enumerate(h_lower) if any(kw in h for kw in name_keywords) and not any(kw in h for kw in exam_keywords)), None)
+        exam_col = next((i for i, h in enumerate(h_lower) if any(kw in h for kw in exam_keywords)), 1)
+        mark_col = next((i for i, h in enumerate(h_lower) if any(kw in h for kw in ['mark', 'score', 'obtained', 'val'])), len(headers) - 1)
+
+        students_map = {}
+        assessments_set = []
+
+        row_counter = 0
+        for row in rows:
+            if len(row) <= max(exam_col, mark_col):
+                continue
+            exam = row[exam_col].strip()
+            mark = row[mark_col].strip()
+            if not exam:
+                continue
+
+            if roll_col is not None and len(row) > roll_col and row[roll_col].strip():
+                roll = row[roll_col].strip()
+            else:
+                roll = f"{row_counter + 1}"
+
+            if name_col is not None and len(row) > name_col and row[name_col].strip():
+                name = row[name_col].strip()
+            else:
+                name = f"Student {roll}"
+
+            if exam not in assessments_set:
+                assessments_set.append(exam)
+
+            if roll not in students_map:
+                row_counter += 1
+                students_map[roll] = {'roll_no': roll, 'name': name, 'marks': {}}
+            students_map[roll]['marks'][exam] = mark
+
+        students_list = list(students_map.values())
+        assessment_cols = assessments_set
+    else:
+        # Wide format
+        # Detect whether Roll and/or Name columns exist
+        roll_col_idx = None
+        name_col_idx = None
+
+        for i, h in enumerate(h_lower):
+            is_exam = any(kw in h for kw in exam_keywords)
+            # Only consider as roll/name if it's NOT an obvious exam/assessment column
+            if not is_exam and roll_col_idx is None:
+                if any(kw in h for kw in roll_keywords) or h in roll_exact:
+                    roll_col_idx = i
+                    continue
+            if not is_exam and name_col_idx is None:
+                if any(kw in h for kw in name_keywords):
+                    name_col_idx = i
+                    continue
+
+        meta_indices = set()
+        if roll_col_idx is not None:
+            meta_indices.add(roll_col_idx)
+        if name_col_idx is not None:
+            meta_indices.add(name_col_idx)
+
+        # Assessment columns are all remaining columns (or all columns if none matched)
+        assessment_cols = [headers[i] for i in range(len(headers)) if i not in meta_indices]
+        if not assessment_cols:
+            assessment_cols = headers[:]
+            roll_col_idx = None
+            name_col_idx = None
+            meta_indices.clear()
+
+        for r_idx, row in enumerate(rows, start=1):
+            if roll_col_idx is not None and roll_col_idx < len(row) and row[roll_col_idx].strip():
+                roll = row[roll_col_idx].strip()
+            else:
+                roll = str(r_idx)
+
+            if name_col_idx is not None and name_col_idx < len(row) and row[name_col_idx].strip():
+                name = row[name_col_idx].strip()
+            else:
+                name = f"Student {r_idx}"
+
+            marks = {}
+            for i, h in enumerate(headers):
+                if i not in meta_indices:
+                    marks[h] = row[i].strip() if i < len(row) else ""
+            students_list.append({'roll_no': roll, 'name': name, 'marks': marks})
+
+    # Build smart default column configurations for each assessment
+    standard_ceilings = [5.0, 10.0, 15.0, 20.0, 25.0, 30.0, 40.0, 50.0, 60.0, 70.0, 75.0, 80.0, 100.0]
+
+    for idx, col_name in enumerate(assessment_cols, start=1):
+        col_lower = col_name.lower()
+
+        # Collect numeric values for this column to find the highest mark scored
+        numeric_marks = []
+        for s in students_list:
+            v_str = str(s['marks'].get(col_name, '')).strip()
+            try:
+                v_num = float(v_str)
+                if v_num >= 0:
+                    numeric_marks.append(v_num)
+            except ValueError:
+                pass
+
+        max_observed = max(numeric_marks) if numeric_marks else 0.0
+
+        if 'cce' in col_lower or 'quiz' in col_lower or 'assign' in col_lower:
+            base_max = 10.0
+        elif 'ut' in col_lower or 'unit' in col_lower or 'test' in col_lower:
+            base_max = 30.0 if max_observed > 20.0 else 20.0
+        elif 'insem' in col_lower or 'mid' in col_lower:
+            base_max = 30.0
+        elif 'prelim' in col_lower or 'pre' in col_lower:
+            base_max = 50.0
+        elif 'ese' in col_lower or 'end' in col_lower or 'sem' in col_lower:
+            base_max = 100.0
+        else:
+            base_max = 20.0
+
+        # Smart ceiling so max marks NEVER starts below actual marks scored
+        def_max = base_max
+        if max_observed > base_max:
+            for c in standard_ceilings:
+                if c >= max_observed:
+                    def_max = float(c)
+                    break
+            else:
+                def_max = float(math.ceil(max_observed / 10.0) * 10)
+
+        # Auto assign default CO (e.g. UT1 -> CO1, UT2 -> CO2 or sequential)
+        m_co = re.search(r'\d+', col_name)
+        if m_co:
+            def_co = f"CO{m_co.group()}"
+        else:
+            def_co = f"CO{((idx - 1) % 6) + 1}"
+
+        column_configs.append({
+            'name': col_name,
+            'checked': True,
+            'max_marks': def_max,
+            'mapped_cos': [def_co]
+        })
+
+    TEMP_DATA_STORE[sid]['direct_raw'] = {
+        'column_configs': column_configs,
+        'students': students_list
+    }
+
+    return jsonify({
+        'success': True,
+        'is_long_format': is_long_format,
+        'column_configs': column_configs,
+        'students': students_list
+    })
+
+
+@app.route('/api/compute-direct', methods=['POST'])
+def api_compute_direct():
+    """Validates marks and computes direct CO attainment."""
+    sid = get_session_id()
+    data = request.get_json(force=True)
+    
+    students = data.get('students', [])
+    column_configs = data.get('column_configs', [])
+    passing_threshold_ratio = float(data.get('passing_threshold_ratio', 0.50))
+
+    result = validate_and_compute_direct(students, column_configs, passing_threshold_ratio)
+    if result['success']:
+        TEMP_DATA_STORE[sid]['direct_computed'] = result['data']
+        # Re-compute weighted if indirect exists
+        if TEMP_DATA_STORE[sid].get('indirect_computed'):
+            recompute_weighted_internal(sid)
+        return jsonify(result)
+    else:
+        return jsonify(result), 400
+
+
+@app.route('/api/upload-indirect', methods=['POST'])
+def api_upload_indirect():
+    """Parses indirect survey/rating file or pasted text."""
+    sid = get_session_id()
+    
+    headers = []
+    rows = []
+    
+    if 'file' in request.files and request.files['file'].filename:
+        file = request.files['file']
+        if not allowed_file(file.filename):
+            return jsonify({'success': False, 'message': 'Unsupported file format. Please upload CSV, TSV, or XLSX.'}), 400
+        headers, rows = parse_uploaded_file(file.stream, secure_filename(file.filename))
+    elif 'pasted_text' in request.form and request.form['pasted_text'].strip():
+        headers, rows = parse_delimited_or_matrix_text(request.form['pasted_text'])
+    else:
+        return jsonify({'success': False, 'message': 'No indirect file or pasted data provided.'}), 400
+
+    if not headers or not rows:
+        return jsonify({'success': False, 'message': 'The uploaded file or text is empty.'}), 400
+
+    headers = [str(h).strip() for h in headers]
+    ratings_data = []
+    for r in rows:
+        row_dict = {}
+        for c_idx, h in enumerate(headers):
+            row_dict[h] = r[c_idx].strip() if c_idx < len(r) else ""
+        ratings_data.append(row_dict)
+
+    TEMP_DATA_STORE[sid]['indirect_raw'] = {
+        'headers': headers,
+        'ratings_data': ratings_data
+    }
+
+    mapping_target = request.form.get('mapping_target', 'CO').strip().upper()
+    if mapping_target == 'PO':
+        detected_cos = [h for h in headers if re.match(r'^(PO|po|PSO|pso)[\s_-]*\d+', h)]
+        if not detected_cos:
+            detected_cos = [h for h in headers if "PO" in h.upper()]
+    else:
+        detected_cos = [h for h in headers if re.match(r'^(CO|co)[\s_-]*\d+', h)]
+        if not detected_cos:
+            detected_cos = [h for h in headers if "CO" in h.upper()]
+
+    return jsonify({
+        'success': True,
+        'headers': headers,
+        'detected_cos': detected_cos,
+        'ratings_data': ratings_data,
+        'mapping_target': mapping_target
+    })
+
+
+@app.route('/api/compute-indirect', methods=['POST'])
+def api_compute_indirect():
+    """Validates and computes indirect survey CO/PO attainment."""
+    sid = get_session_id()
+    data = request.get_json(force=True)
+    
+    ratings_data = data.get('ratings_data', [])
+    max_rating = float(data.get('max_rating', 10.0))
+    co_columns_override = data.get('co_columns_override')
+    mapping_target = data.get('mapping_target', 'CO')
+
+    result = validate_and_compute_indirect(ratings_data, max_rating, co_columns_override, mapping_target=mapping_target)
+    if result['success']:
+        TEMP_DATA_STORE[sid]['indirect_computed'] = result['data']
+        # Re-compute weighted if direct exists and mapping_target is CO
+        if TEMP_DATA_STORE[sid].get('direct_computed'):
+            recompute_weighted_internal(sid)
+        return jsonify(result)
+    else:
+        return jsonify(result), 400
+
+
+def recompute_weighted_internal(sid: str, direct_weight: float = 80.0, indirect_weight: float = 20.0):
+    direct_res = TEMP_DATA_STORE[sid].get('direct_computed', {})
+    indirect_res = TEMP_DATA_STORE[sid].get('indirect_computed', {})
+    
+    d_cos = direct_res.get('co_summaries', [])
+    i_cos = indirect_res.get('co_summaries', []) if indirect_res else []
+    
+    res = compute_weighted_co_attainment(d_cos, i_cos, direct_weight, indirect_weight)
+    if res['success']:
+        TEMP_DATA_STORE[sid]['weighted_computed'] = res['data']
+    return res
+
+
+@app.route('/api/compute-weighted', methods=['POST'])
+def api_compute_weighted():
+    """Computes combined weighted attainment with custom weights."""
+    sid = get_session_id()
+    data = request.get_json(force=True)
+    
+    try:
+        direct_weight = float(data.get('direct_weight', 80.0))
+        indirect_weight = float(data.get('indirect_weight', 20.0))
+    except (ValueError, TypeError):
+        return jsonify({'success': False, 'message': 'Invalid weights. Must be numbers.'}), 400
+
+    if abs((direct_weight + indirect_weight) - 100.0) > 0.01:
+        return jsonify({'success': False, 'message': f'Weights must sum to 100%. (Current total: {direct_weight + indirect_weight}%)'}), 400
+
+    direct_res = TEMP_DATA_STORE[sid].get('direct_computed')
+    if not direct_res:
+        return jsonify({'success': False, 'message': 'Direct assessment data not yet computed.'}), 400
+
+    indirect_res = TEMP_DATA_STORE[sid].get('indirect_computed')
+    i_cos = indirect_res.get('co_summaries', []) if indirect_res else []
+
+    res = compute_weighted_co_attainment(
+        direct_res.get('co_summaries', []),
+        i_cos,
+        direct_weight,
+        indirect_weight
+    )
+    if res['success']:
+        TEMP_DATA_STORE[sid]['weighted_computed'] = res['data']
+        return jsonify(res)
+    else:
+        return jsonify(res), 400
+
+
+@app.route('/api/upload-copo', methods=['POST'])
+def api_upload_copo():
+    """
+    Parses CO-PO mapping file (CSV, TSV, XLSX, or pasted).
+    Supports named tables and headerless numeric matrices.
+    Automatically assigns CO1..COn and PO1..POn for headerless matrices.
+    """
+    sid = get_session_id()
+    headers = []
+    rows = []
+
+    if 'file' in request.files and request.files['file'].filename:
+        file = request.files['file']
+        if not allowed_file(file.filename):
+            return jsonify({'success': False, 'message': 'Unsupported file format.'}), 400
+        headers, rows = parse_uploaded_file(file.stream, secure_filename(file.filename))
+    elif 'pasted_text' in request.form and request.form['pasted_text'].strip():
+        headers, rows = parse_delimited_or_matrix_text(request.form['pasted_text'])
+    else:
+        return jsonify({'success': False, 'message': 'No file or pasted text provided.'}), 400
+
+    if not headers:
+        return jsonify({'success': False, 'message': 'Uploaded file is empty.'}), 400
+
+    # Determine if headerless numeric matrix:
+    # If first row contains numeric values (e.g. 0, 1, 2, 3), it is headerless!
+    is_headerless = False
+    all_numeric_first_row = True
+    for val in headers:
+        try:
+            float(val.strip())
+        except ValueError:
+            all_numeric_first_row = False
+            break
+
+    matrix_rows = []
+    co_labels = []
+    po_labels = []
+
+    if all_numeric_first_row:
+        # All rows including headers are data rows
+        all_data_rows = [headers] + rows
+        col_count = len(headers)
+        # Assign PO1, PO2, ..., PO12, PSO1...
+        po_labels = [f"PO{i+1}" if i < 12 else f"PSO{i-11}" for i in range(col_count)]
+        co_labels = [f"CO{i+1}" for i in range(len(all_data_rows))]
+
+        matrix_dict = {}
+        for r_idx, row in enumerate(all_data_rows):
+            co_name = co_labels[r_idx]
+            matrix_dict[co_name] = {}
+            for c_idx, po_name in enumerate(po_labels):
+                val_str = row[c_idx].strip() if c_idx < len(row) else "0"
+                try:
+                    num_val = float(val_str)
+                except ValueError:
+                    num_val = 0.0
+                matrix_dict[co_name][po_name] = num_val
+        is_headerless = True
+    else:
+        # Named matrix
+        # First column is CO name, remaining columns are PO/PSOs
+        po_labels = [h.strip() for h in headers[1:] if h.strip()]
+        matrix_dict = {}
+        for r_idx, row in enumerate(rows):
+            if not row:
+                continue
+            co_name = row[0].strip() or f"CO{r_idx + 1}"
+            co_labels.append(co_name)
+            matrix_dict[co_name] = {}
+            for c_idx, po_name in enumerate(po_labels, start=1):
+                val_str = row[c_idx].strip() if c_idx < len(row) else "0"
+                try:
+                    num_val = float(val_str)
+                except ValueError:
+                    num_val = 0.0
+                matrix_dict[co_name][po_name] = num_val
+
+    TEMP_DATA_STORE[sid]['copo_mapping'] = {
+        'co_list': co_labels,
+        'po_list': po_labels,
+        'matrix': matrix_dict,
+        'is_headerless': is_headerless
+    }
+
+    return jsonify({
+        'success': True,
+        'is_headerless': is_headerless,
+        'co_list': co_labels,
+        'po_list': po_labels,
+        'matrix': matrix_dict
+    })
+
+
+@app.route('/api/compute-copo', methods=['POST'])
+def api_compute_copo():
+    """Computes PO & PSO attainment from the mapping matrix."""
+    sid = get_session_id()
+    data = request.get_json(force=True)
+    
+    matrix = data.get('matrix', {})
+    po_list = data.get('po_list')
+    co_list = data.get('co_list')
+
+    # Get combined CO attainments
+    weighted_data = TEMP_DATA_STORE[sid].get('weighted_computed')
+    direct_data = TEMP_DATA_STORE[sid].get('direct_computed')
+
+    co_attainments = {}
+    if weighted_data and weighted_data.get('combined_results'):
+        for item in weighted_data['combined_results']:
+            co_attainments[item['co']] = item['combined_attainment']
+    elif direct_data and direct_data.get('co_summaries'):
+        for item in direct_data['co_summaries']:
+            co_attainments[item['co']] = item['attainment']
+    else:
+        # Default fallback
+        for co in matrix.keys():
+            co_attainments[co] = 2.0
+
+    result = compute_po_attainment(matrix, co_attainments, po_list, co_list)
+    
+    TEMP_DATA_STORE[sid]['copo_computed'] = {
+        'matrix': matrix,
+        'co_list': result['co_list'],
+        'po_list': result['po_list'],
+        'po_results': result['po_results'],
+        'overall_po_attainment': result['overall_po_attainment'],
+        'overall_po_level': result['overall_po_level']
+    }
+
+    return jsonify({'success': True, 'data': TEMP_DATA_STORE[sid]['copo_computed']})
+
+
+@app.route('/api/get-full-state', methods=['GET'])
+def api_get_full_state():
+    """Returns the complete evaluation state for rendering."""
+    sid = get_session_id()
+    state = TEMP_DATA_STORE[sid]
+    return jsonify({
+        'teacher': state.get('teacher', {}),
+        'direct': state.get('direct_computed'),
+        'indirect': state.get('indirect_computed'),
+        'weighted': state.get('weighted_computed'),
+        'copo': state.get('copo_computed')
+    })
+
+
+# =========================================================================
+# EXPORTS & DOWNLOADS
+# =========================================================================
+
+@app.route('/download/complete-excel')
+def download_complete_excel():
+    """Generates and downloads the full multi-sheet Excel report."""
+    sid = get_session_id()
+    state = TEMP_DATA_STORE[sid]
+    
+    report_data = {
+        'teacher': state.get('teacher') or {},
+        'direct': {'data': state.get('direct_computed') or {}},
+        'indirect': {'data': state.get('indirect_computed') or {}},
+        'weighted': {'data': state.get('weighted_computed') or {}},
+        'copo': state.get('copo_computed') or {}
+    }
+
+    excel_io = create_complete_excel_report(report_data)
+    subject_safe = re.sub(r'[^a-zA-Z0-9_-]', '_', state.get('teacher', {}).get('subject', 'Course'))
+    filename = f"CO_PO_Attainment_Report_{subject_safe}.xlsx"
+    
+    return send_file(
+        excel_io,
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        as_attachment=True,
+        download_name=filename
+    )
+
+
+@app.route('/download/word-report')
+def download_word_report():
+    """Generates and downloads the Word DOCX report."""
+    sid = get_session_id()
+    state = TEMP_DATA_STORE[sid]
+
+    report_data = {
+        'teacher': state.get('teacher') or {},
+        'direct': {'data': state.get('direct_computed') or {}},
+        'indirect': {'data': state.get('indirect_computed') or {}},
+        'weighted': {'data': state.get('weighted_computed') or {}},
+        'copo': state.get('copo_computed') or {}
+    }
+
+    docx_io = create_word_report(report_data)
+    subject_safe = re.sub(r'[^a-zA-Z0-9_-]', '_', state.get('teacher', {}).get('subject', 'Course'))
+    filename = f"CO_PO_Attainment_Report_{subject_safe}.docx"
+
+    return send_file(
+        docx_io,
+        mimetype="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        as_attachment=True,
+        download_name=filename
+    )
+
+
+@app.route('/download/pdf-report')
+def download_pdf_report():
+    """Generates and downloads the accreditation-ready PDF report."""
+    sid = get_session_id()
+    state = TEMP_DATA_STORE[sid]
+
+    report_data = {
+        'teacher': state.get('teacher') or {},
+        'direct': {'data': state.get('direct_computed') or {}},
+        'indirect': {'data': state.get('indirect_computed') or {}},
+        'weighted': {'data': state.get('weighted_computed') or {}},
+        'copo': state.get('copo_computed') or {}
+    }
+
+    charts_arg = request.args.get('charts', '1').lower()
+    include_charts = charts_arg in ['1', 'true', 'yes', 'on']
+
+    pdf_io = create_pdf_report(report_data, include_charts=include_charts)
+    teacher = state.get('teacher') or {}
+    subject_safe = re.sub(r'[^a-zA-Z0-9_-]', '_', teacher.get('subject', 'Course'))
+    chart_suffix = "_With_Graphs" if include_charts else "_Tables_Only"
+    filename = f"CO_PO_Attainment_Report_{subject_safe}{chart_suffix}.pdf"
+
+    return send_file(
+        pdf_io,
+        mimetype="application/pdf",
+        as_attachment=True,
+        download_name=filename
+    )
+
+
+@app.route('/download/assessment-pdf')
+def download_assessment_pdf():
+    """Generates and downloads the Page 2 Assessment PDF report (Direct, Assessment Tools, Weighted COs)."""
+    sid = get_session_id()
+    state = TEMP_DATA_STORE[sid]
+
+    report_data = {
+        'teacher': state.get('teacher') or {},
+        'direct': {'data': state.get('direct_computed') or {}},
+        'indirect': {'data': state.get('indirect_computed') or {}},
+        'weighted': {'data': state.get('weighted_computed') or {}},
+        'copo': state.get('copo_computed') or {}
+    }
+
+    charts_arg = request.args.get('charts', '1').lower()
+    include_charts = charts_arg in ['1', 'true', 'yes', 'on']
+
+    pdf_io = create_pdf_report(report_data, include_charts=include_charts, section="assessment")
+    teacher = state.get('teacher') or {}
+    subject_safe = re.sub(r'[^a-zA-Z0-9_-]', '_', teacher.get('subject', 'Course'))
+    chart_suffix = "_With_Graphs" if include_charts else "_Tables_Only"
+    filename = f"CO_Assessment_Report_{subject_safe}{chart_suffix}.pdf"
+
+    return send_file(
+        pdf_io,
+        mimetype="application/pdf",
+        as_attachment=True,
+        download_name=filename
+    )
+
+
+@app.route('/download/copo-pdf')
+def download_copo_pdf():
+    """Generates and downloads the Page 3 CO-PO Matrix & PO Attainment PDF report."""
+    sid = get_session_id()
+    state = TEMP_DATA_STORE[sid]
+
+    report_data = {
+        'teacher': state.get('teacher') or {},
+        'direct': {'data': state.get('direct_computed') or {}},
+        'indirect': {'data': state.get('indirect_computed') or {}},
+        'weighted': {'data': state.get('weighted_computed') or {}},
+        'copo': state.get('copo_computed') or {}
+    }
+
+    pdf_io = create_pdf_report(report_data, include_charts=False, section="copo")
+    teacher = state.get('teacher') or {}
+    subject_safe = re.sub(r'[^a-zA-Z0-9_-]', '_', teacher.get('subject', 'Course'))
+    filename = f"CO_PO_Attainment_Report_{subject_safe}.pdf"
+
+    return send_file(
+        pdf_io,
+        mimetype="application/pdf",
+        as_attachment=True,
+        download_name=filename
+    )
+
+
+@app.route('/download/students-report')
+def download_students_report():
+    """Generates and downloads the student-wise performance and marks report in Excel."""
+    sid = get_session_id()
+    state = TEMP_DATA_STORE[sid]
+    direct_data = state.get('direct_computed') or {}
+    teacher = state.get('teacher') or {}
+
+    excel_io = create_students_only_excel(direct_data, teacher)
+    subject_safe = re.sub(r'[^a-zA-Z0-9_-]', '_', teacher.get('subject', 'Course'))
+    filename = f"Students_Performance_Report_{subject_safe}.xlsx"
+
+    return send_file(
+        excel_io,
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        as_attachment=True,
+        download_name=filename
+    )
+
+
+@app.route('/download/direct-report')
+def download_direct_report():
+    sid = get_session_id()
+    state = TEMP_DATA_STORE[sid]
+    direct_data = state.get('direct_computed', {})
+    teacher = state.get('teacher', {})
+
+    excel_io = create_direct_only_excel(direct_data, teacher)
+    subject_safe = re.sub(r'[^a-zA-Z0-9_-]', '_', teacher.get('subject', 'Course'))
+    return send_file(
+        excel_io,
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        as_attachment=True,
+        download_name=f"Direct_Attainment_{subject_safe}.xlsx"
+    )
+
+
+@app.route('/download/indirect-report')
+def download_indirect_report():
+    sid = get_session_id()
+    state = TEMP_DATA_STORE[sid]
+    indirect_data = state.get('indirect_computed', {})
+    teacher = state.get('teacher', {})
+
+    excel_io = create_indirect_only_excel(indirect_data, teacher)
+    subject_safe = re.sub(r'[^a-zA-Z0-9_-]', '_', teacher.get('subject', 'Course'))
+    return send_file(
+        excel_io,
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        as_attachment=True,
+        download_name=f"Indirect_Attainment_{subject_safe}.xlsx"
+    )
+
+
+@app.route('/download/copo-report')
+def download_copo_report():
+    sid = get_session_id()
+    state = TEMP_DATA_STORE[sid]
+    copo_data = state.get('copo_computed', {})
+    teacher = state.get('teacher', {})
+
+    excel_io = create_copo_only_excel(copo_data, teacher)
+    subject_safe = re.sub(r'[^a-zA-Z0-9_-]', '_', teacher.get('subject', 'Course'))
+    return send_file(
+        excel_io,
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        as_attachment=True,
+        download_name=f"CO_PO_Attainment_{subject_safe}.xlsx"
+    )
+
+
+@app.route('/sample-data/<filename>')
+def download_sample_data(filename):
+    """Serves sample datasets for testing."""
+    sample_dir = os.path.join(app.root_path, 'sample_data')
+    return send_from_directory(sample_dir, filename, as_attachment=True)
+
+
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=5000, debug=True)

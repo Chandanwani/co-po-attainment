@@ -1,0 +1,317 @@
+{% extends "base.html" %}
+
+{% block title %}Final Attainment Report - CO-PO Attainment{% endblock %}
+
+{% block content %}
+<div class="container">
+
+  <!-- Download & Action Header -->
+  <div class="card mb-16" style="background: #ffffff; border: 2px solid var(--primary);">
+    <div class="flex-between">
+      <div>
+        <h1 style="font-size: 22px; font-weight: 700; color: var(--primary);">Comprehensive CO-PO Attainment Report</h1>
+        <p style="font-size: 13.5px; color: var(--text-muted); margin-top: 4px;">
+          Accreditation-ready summary and specialized modular exports for {{ teacher.subject }} ({{ teacher.academic_year or 'Academic Year' }}).
+        </p>
+      </div>
+      <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+        <!-- PDF Report Download (Prompting for Graphs) -->
+        <button type="button" class="btn btn-primary btn-lg" style="font-weight: 700; background: #dc2626; border-color: #dc2626; color: #fff;" onclick="openPdfModal()">
+          &darr; PDF Report (.pdf)
+        </button>
+        <!-- Word Compatible Report Download -->
+        <a href="{{ url_for('download_word_report') }}" class="btn btn-outline btn-lg">
+          &darr; Word Document (.docx)
+        </a>
+      </div>
+    </div>
+
+    <!-- Dedicated Page Reports Bar -->
+    <div style="margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border-color); display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
+      <span style="font-size: 12px; font-weight: 600; color: var(--text-muted);">Dedicated PDF Reports:</span>
+      <a href="{{ url_for('download_assessment_pdf') }}" class="btn btn-outline btn-sm" style="color: #dc2626; border-color: #fca5a5;">📄 Assessment PDF</a>
+      <a href="{{ url_for('download_copo_pdf') }}" class="btn btn-outline btn-sm" style="color: #dc2626; border-color: #fca5a5;">📄 CO-PO PDF</a>
+      <span style="font-size: 12px; font-weight: 600; color: var(--text-muted); margin-left: 8px;">Separate Excel Reports:</span>
+      <a href="{{ url_for('download_direct_report') }}" class="btn btn-outline btn-sm">&darr; Direct Report (.xlsx)</a>
+      <a href="{{ url_for('download_students_report') }}" class="btn btn-outline btn-sm" style="color: #0369a1; border-color: #7dd3fc;">&darr; Students Performance (.xlsx)</a>
+      <a href="{{ url_for('download_indirect_report') }}" class="btn btn-outline btn-sm">&darr; Indirect Report (.xlsx)</a>
+      <a href="{{ url_for('download_copo_report') }}" class="btn btn-outline btn-sm">&darr; CO-PO Report (.xlsx)</a>
+      <button type="button" class="btn btn-outline btn-sm" onclick="window.print()">&#128438; Print Page</button>
+    </div>
+  </div>
+
+  <!-- Interactive Modal for PDF Download Options (Ask to include graphs or not) -->
+  <div id="pdfDownloadModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(15,23,42,0.6); z-index: 9999; align-items: center; justify-content: center;">
+    <div class="card" style="max-width: 440px; width: 90%; background: #ffffff; padding: 22px; border-radius: 12px; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.3);">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+        <h3 style="font-size: 16.5px; font-weight: 700; color: var(--primary); margin: 0;">Download PDF Report Options</h3>
+        <button type="button" onclick="closePdfModal()" style="background: none; border: none; font-size: 22px; cursor: pointer; color: var(--text-muted); line-height: 1;">&times;</button>
+      </div>
+      <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 14px;">
+        Would you like to include visual analytics and graphs in the generated PDF report?
+      </p>
+      <div style="background: #f8fafc; padding: 12px 14px; border-radius: 8px; border: 1px solid var(--border-color); margin-bottom: 18px;">
+        <label style="display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; cursor: pointer; margin-bottom: 10px;">
+          <input type="radio" name="pdfChartOption" value="1" checked>
+          <span>Include Visual Charts &amp; Graphs (With Graphs)</span>
+        </label>
+        <label style="display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; cursor: pointer;">
+          <input type="radio" name="pdfChartOption" value="0">
+          <span>Accreditation Tables Only (Without Graphs)</span>
+        </label>
+      </div>
+      <div style="display: flex; justify-content: flex-end; gap: 10px;">
+        <button type="button" class="btn btn-outline btn-sm" onclick="closePdfModal()">Cancel</button>
+        <button type="button" class="btn btn-primary btn-sm" style="background: #dc2626; border-color: #dc2626; color: #fff;" onclick="proceedPdfDownload()">
+          &darr; Download PDF
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Section 1: Teacher & Course Information -->
+  <div class="card mb-16">
+    <div class="card-header">
+      <h2 class="card-title">1. Course &amp; Faculty Information</h2>
+      <a href="{{ url_for('page1_teacher') }}" class="btn btn-outline btn-sm">&larr; Edit Details</a>
+    </div>
+
+    <div class="grid-3">
+      <div class="stat-card" style="text-align: left;">
+        <div class="stat-label">Faculty Name</div>
+        <div style="font-size: 16px; font-weight: 700; color: var(--primary); margin-top: 4px;">
+          {{ teacher.faculty_name }}
+        </div>
+      </div>
+      <div class="stat-card" style="text-align: left;">
+        <div class="stat-label">Subject Name &amp; Code</div>
+        <div style="font-size: 16px; font-weight: 700; color: var(--primary); margin-top: 4px;">
+          {{ teacher.subject }}
+        </div>
+      </div>
+      <div class="stat-card" style="text-align: left;">
+        <div class="stat-label">Class &amp; Division</div>
+        <div style="font-size: 16px; font-weight: 700; color: var(--primary); margin-top: 4px;">
+          {{ teacher.class_name or 'N/A' }} (Div {{ teacher.division or 'A' }})
+        </div>
+      </div>
+      <div class="stat-card" style="text-align: left;">
+        <div class="stat-label">Semester &amp; Academic Year</div>
+        <div style="font-size: 16px; font-weight: 700; color: var(--primary); margin-top: 4px;">
+          {{ teacher.semester or 'N/A' }} &bull; {{ teacher.academic_year or 'N/A' }}
+        </div>
+      </div>
+      <div class="stat-card" style="text-align: left;">
+        <div class="stat-label">Attainment Weightage</div>
+        <div style="font-size: 16px; font-weight: 700; color: var(--accent); margin-top: 4px;" id="repWeightDisp">
+          80% Direct / 20% Indirect
+        </div>
+      </div>
+      <div class="stat-card" style="text-align: left; background: #eff6ff;">
+        <div class="stat-label">Overall Course Attainment</div>
+        <div style="font-size: 20px; font-weight: 700; color: var(--accent); margin-top: 4px;" id="repOverallAtt">
+          - / 3.00
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Section 2: Overall Weighted CO Attainment & Summary -->
+  <div class="card mb-16">
+    <div class="card-header">
+      <div>
+        <h2 class="card-title">2. Course Outcome (CO) Attainment Summary (Direct, Indirect &amp; Weighted)</h2>
+        <p class="card-subtitle">Complete OBE evaluation combining continuous marks evaluation and student survey ratings.</p>
+      </div>
+    </div>
+
+    <div class="table-responsive">
+      <table class="table" id="repWeightedTable">
+        <thead>
+          <tr>
+            <th>Course Outcome</th>
+            <th>Direct %</th>
+            <th>Direct Contrib. (%)</th>
+            <th>Direct Attainment (Points)</th>
+            <th>Indirect %</th>
+            <th>Indirect Contrib. (%)</th>
+            <th>Indirect Attainment (Points)</th>
+            <th>Combined %</th>
+            <th>Combined Attainment (Points)</th>
+            <th>Attainment Level (Points)</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+
+    <!-- CO Comparison Graphs -->
+    <div class="grid-2 mt-16">
+      <div class="chart-box" style="height: 230px;">
+        <h4 style="font-size: 13px; font-weight: 600; color: var(--primary); margin-bottom: 8px;">
+          Course Outcome Attainment: Direct vs Indirect vs Combined
+        </h4>
+        <canvas id="repChartCO"></canvas>
+      </div>
+      <div class="chart-box" style="height: 230px;">
+        <h4 style="font-size: 13px; font-weight: 600; color: var(--primary); margin-bottom: 8px;">
+          Students Passing Each CO (%)
+        </h4>
+        <canvas id="repChartCOPass"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <!-- Section 3: Program Outcome (PO & PSO) Attainment -->
+  <div class="card mb-16">
+    <div class="card-header">
+      <div>
+        <h2 class="card-title">3. Program Outcome (PO &amp; PSO) Attainment</h2>
+        <p class="card-subtitle">Correlation mapping articulation and weighted PO attainment scores.</p>
+      </div>
+      <div>
+        <span class="badge" id="repOverallPOBadge" style="font-size: 13px; padding: 4px 10px; background: #dcfce7; color: #166534;">
+          Average PO Attainment: -
+        </span>
+      </div>
+    </div>
+
+    <!-- CO-PO Correlation Matrix View -->
+    <div class="table-responsive mb-16" style="max-height: 250px; overflow-y: auto;">
+      <table class="table table-sm" id="repCOPOMatrixTable">
+        <thead></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+
+    <!-- PO Attainment Table -->
+    <div class="table-responsive mb-16">
+      <table class="table" id="repPOTable">
+        <thead>
+          <tr>
+            <th>Program Outcome (PO/PSO)</th>
+            <th>Mapping Level Sum</th>
+            <th>Weighted CO Sum</th>
+            <th>PO Attainment Value (0-3)</th>
+            <th>Attainment Level</th>
+            <th>Contributing Mapped COs</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+
+    <!-- PO Graphs -->
+    <div class="grid-2">
+      <div class="chart-box" style="height: 230px;">
+        <h4 style="font-size: 13px; font-weight: 600; color: var(--primary); margin-bottom: 8px;">PO Attainment Profile (Bar Chart)</h4>
+        <canvas id="repChartPOBar"></canvas>
+      </div>
+      <div class="chart-box" style="height: 230px;">
+        <h4 style="font-size: 13px; font-weight: 600; color: var(--primary); margin-bottom: 8px;">PO Attainment Profile (Radar / Spider Chart)</h4>
+        <canvas id="repChartPORadar"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <!-- Section 4: Assessment Tools Setup & Passing Summaries -->
+  <div class="card mb-16">
+    <div class="card-header">
+      <div>
+        <h2 class="card-title">4. Assessment Tools Passing Summaries (Test, CCE, Unit Tests, ESE)</h2>
+        <p class="card-subtitle">Summary of individual evaluation components evaluated for direct attainment.</p>
+      </div>
+    </div>
+    <div class="table-responsive">
+      <table class="table" id="repAssessmentTable">
+        <thead>
+          <tr>
+            <th>Assessment Name</th>
+            <th>Mapped COs</th>
+            <th>Max Marks</th>
+            <th>Passing Mark (50%)</th>
+            <th>Students Appeared</th>
+            <th>Students Passed</th>
+            <th>Students Failed</th>
+            <th>Pass %</th>
+            <th>Average Marks</th>
+            <th>Min Scored</th>
+            <th>Max Scored</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Section 5: All-Student Performance & Passing COs -->
+  <div class="card mb-16">
+    <div class="card-header">
+      <div>
+        <h2 class="card-title">5. Student-wise Performance &amp; Attained COs</h2>
+        <p class="card-subtitle">All evaluated students with total marks, percentages, and passed COs list.</p>
+      </div>
+    </div>
+
+    <div class="grid-2 mb-16">
+      <div class="chart-box" style="height: 230px;">
+        <h4 style="font-size: 13px; font-weight: 600; color: var(--primary); margin-bottom: 8px;">Student Overall Performance Distribution</h4>
+        <canvas id="repChartStudentDist"></canvas>
+      </div>
+      <div class="chart-box" style="height: 230px;">
+        <h4 style="font-size: 13px; font-weight: 600; color: var(--primary); margin-bottom: 8px;">Assessment-wise Passing %</h4>
+        <canvas id="repChartAssessPass"></canvas>
+      </div>
+    </div>
+
+    <div class="table-responsive" style="max-height: 400px; overflow-y: auto;">
+      <table class="table table-sm" id="repStudentTable">
+        <thead>
+          <tr>
+            <th>Roll No</th>
+            <th>Student Name</th>
+            <th>Total Obtained</th>
+            <th>Max Marks</th>
+            <th>Percentage (%)</th>
+            <th>Passed COs Count</th>
+            <th>Passed COs List</th>
+            <th>Passed All COs?</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Section 6: Indirect Survey Attainment Details -->
+  <div class="card mb-16">
+    <div class="card-header">
+      <div>
+        <h2 class="card-title">6. Indirect Assessment (Exit Survey) Detailed Breakdown</h2>
+        <p class="card-subtitle">Survey responses, average rating scale, and individual CO ratings.</p>
+      </div>
+    </div>
+    <div class="table-responsive">
+      <table class="table" id="repIndirectTable">
+        <thead>
+          <tr>
+            <th>Course Outcome</th>
+            <th>Survey Responses</th>
+            <th>Max Rating Scale</th>
+            <th>Average Rating</th>
+            <th>Rating Percentage (%)</th>
+            <th>Indirect Attainment (0-3)</th>
+            <th>Attainment Level</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/report.js') }}"></script>
+{% endblock %}

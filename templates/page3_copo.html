@@ -1,0 +1,160 @@
+{% extends "base.html" %}
+
+{% block title %}CO-PO Mapping - CO-PO Attainment{% endblock %}
+
+{% block content %}
+<div class="container">
+
+  <!-- Header Banner -->
+  <div class="card mb-16" style="padding: 16px 20px;">
+    <div class="flex-between">
+      <div>
+        <h1 style="font-size: 20px; font-weight: 700; color: var(--primary);">Step 3: CO-PO &amp; CO-PSO Correlation Mapping</h1>
+        <p style="color: var(--text-muted); font-size: 13px;">
+          Map Course Outcomes (COs) to Program Outcomes (POs/PSOs) with correlation levels:
+          <strong>3 = Substantial (High)</strong>, <strong>2 = Moderate (Medium)</strong>, <strong>1 = Slight (Low)</strong>, <strong>0 or - = No correlation</strong>.
+        </p>
+      </div>
+      <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+        <a href="{{ url_for('page2_assessment') }}" class="btn btn-outline btn-sm" style="white-space: nowrap;">&larr; Back to Assessment Data</a>
+        <a href="{{ url_for('download_copo_pdf') }}" id="btnCOPOPdfTop" class="btn btn-outline btn-sm" style="display: none; white-space: nowrap; color: #dc2626; border-color: #fca5a5;">📄 Download CO-PO PDF</a>
+        <a href="{{ url_for('page4_report') }}" id="btnGoToStep4" class="btn btn-primary btn-sm" style="display: none; white-space: nowrap;">Go to Final Report &rarr;</a>
+      </div>
+    </div>
+  </div>
+
+  <!-- Upload & Input Card -->
+  <div class="card mb-16">
+    <div class="card-header">
+      <div>
+        <h2 class="card-title">Upload CO-PO Matrix</h2>
+        <p class="card-subtitle">
+          Supports named headers (CO1..CO6 vs PO1..PO12) as well as headerless numeric matrices (auto-assigns CO1.. and PO1..).
+        </p>
+      </div>
+      <div style="display: flex; gap: 8px;">
+        <button type="button" class="btn btn-outline btn-sm" onclick="initializeBlankMatrix()">+ Initialize Blank Matrix</button>
+      </div>
+    </div>
+
+    <div class="tabs">
+      <button type="button" class="tab-btn active" onclick="switchCOPOTab('file')">Upload Matrix File</button>
+      <button type="button" class="tab-btn" onclick="switchCOPOTab('paste')">Paste Matrix Table</button>
+    </div>
+
+    <div id="copoFileTab" class="tab-content active">
+      <div style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap;">
+        <input type="file" id="copoFileInput" accept=".csv, .tsv, .txt, .xlsx, .xls" class="form-control" style="max-width: 360px;" onchange="handleFileSelected('copoFileInput', 'copoFileBadge')">
+        <div id="copoFileBadge" class="file-chosen-badge" style="display: none;">
+          <span id="copoFileBadgeName" class="file-name-text"></span>
+          <button type="button" class="btn-clear-file" onclick="clearFileSelection('copoFileInput', 'copoFileBadge', 'copoErrorAlert')" title="Remove selected file">&times;</button>
+        </div>
+        <button type="button" class="btn btn-primary" onclick="uploadCOPOFile()">Parse CO-PO Matrix</button>
+      </div>
+    </div>
+
+    <div id="copoPasteTab" class="tab-content">
+      <div class="form-group">
+        <label class="form-label">Paste tab-separated or comma-separated matrix:</label>
+        <textarea id="copoPasteInput" class="form-control" rows="5" placeholder="CO&#9;PO1&#9;PO2&#9;PO3&#9;PO4&#10;CO1&#9;3&#9;2&#9;1&#9;0&#10;CO2&#9;2&#9;3&#9;2&#9;1"></textarea>
+      </div>
+      <button type="button" class="btn btn-primary btn-sm" onclick="uploadCOPOPasted()">Parse Pasted Matrix</button>
+    </div>
+
+    <div id="copoErrorAlert" class="alert alert-error mt-16" style="display: none; white-space: pre-line;"></div>
+  </div>
+
+  <!-- Editable CO-PO Matrix Table -->
+  <div id="matrixSection" class="card mb-16" style="display: none;">
+    <div class="card-header">
+      <div>
+        <h3 class="card-title">Editable Correlation Articulation Matrix</h3>
+        <p class="card-subtitle">Edit correlation values (0, 1, 2, or 3) directly in the cells.</p>
+      </div>
+      <div style="display: flex; gap: 8px;">
+        <button type="button" class="btn btn-outline btn-sm" onclick="addPOColumn()">+ Add PO / PSO Column</button>
+        <button type="button" class="btn btn-outline btn-sm" onclick="addCORow()">+ Add CO Row</button>
+        <button type="button" class="btn btn-success btn-sm" onclick="calculatePOAttainment()">&check; Calculate PO Attainment</button>
+      </div>
+    </div>
+
+    <div class="table-responsive" style="max-height: 440px; overflow-y: auto;">
+      <table class="table table-editable table-sm" id="copoMatrixTable">
+        <thead></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- PO Attainment Results & Spider / Bar Graphs -->
+  <div id="poResultsSection" style="display: none;">
+    
+    <div class="card mb-16">
+      <div class="card-header">
+        <div>
+          <h3 class="card-title">Program Outcome (PO &amp; PSO) Attainment Results</h3>
+          <p class="card-subtitle">
+            Formula: PO Attainment = &sum;(Mapping Level &times; Combined CO Attainment) / &sum;(Mapping Level)
+          </p>
+        </div>
+        <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+          <a href="{{ url_for('download_copo_pdf') }}" class="btn btn-sm" style="background: #dc2626; border-color: #dc2626; color: #fff; font-weight: 600;">
+            📄 Download CO-PO PDF
+          </a>
+          <a href="{{ url_for('download_copo_report') }}" class="btn btn-outline btn-sm">
+            &darr; CO-PO Excel (.xlsx)
+          </a>
+          <span class="badge" id="overallPOBadge" style="font-size: 14px; padding: 6px 12px; background: #dcfce7; color: #166534; border-color: #86efac;">
+            Average PO Attainment: -
+          </span>
+        </div>
+      </div>
+
+      <div class="table-responsive">
+        <table class="table" id="poResultsTable">
+          <thead>
+            <tr>
+              <th>Program Outcome (PO/PSO)</th>
+              <th>Mapping Level Sum</th>
+              <th>Weighted CO Sum</th>
+              <th>PO Attainment Value (0-3)</th>
+              <th>Attainment Level</th>
+              <th>Contributing Mapped COs</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- PO Attainment Charts -->
+    <div class="grid-2 mb-24">
+      <div class="chart-box" style="height: 230px;">
+        <h4 style="font-size: 13px; font-weight: 600; color: var(--primary); margin-bottom: 8px;">
+          PO &amp; PSO Attainment Profile (Bar Chart)
+        </h4>
+        <canvas id="chartPOAttainmentBar"></canvas>
+      </div>
+      <div class="chart-box" style="height: 230px;">
+        <h4 style="font-size: 13px; font-weight: 600; color: var(--primary); margin-bottom: 8px;">
+          PO &amp; PSO Attainment Radar / Spider Profile
+        </h4>
+        <canvas id="chartPOAttainmentRadar"></canvas>
+      </div>
+    </div>
+
+    <!-- Proceed to Final Report -->
+    <div class="mt-24 text-right">
+      <a href="{{ url_for('page4_report') }}" class="btn btn-primary btn-lg">
+        Generate &amp; View Final Report &rarr;
+      </a>
+    </div>
+
+  </div>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/copo.js') }}"></script>
+{% endblock %}

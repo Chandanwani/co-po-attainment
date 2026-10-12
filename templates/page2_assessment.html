@@ -1,0 +1,633 @@
+{% extends "base.html" %}
+
+{% block title %}Direct & Indirect Assessment - CO-PO Attainment{% endblock %}
+
+{% block content %}
+<div class="container">
+
+  <!-- Header Banner -->
+  <div class="card mb-16" style="padding: 16px 20px; background: #ffffff;">
+    <div class="flex-between">
+      <div>
+        <h1 style="font-size: 20px; font-weight: 700; color: var(--primary);">Assessment Data &amp; Attainment Evaluation</h1>
+        <p style="color: var(--text-muted); font-size: 13px;">
+          Subject: <strong style="color: var(--primary);">{{ teacher.subject }}</strong> &bull;
+          Faculty: <strong>{{ teacher.faculty_name }}</strong> &bull;
+          Class: {{ teacher.class_name or 'N/A' }} ({{ teacher.division or 'A' }}) &bull;
+          Academic Year: {{ teacher.academic_year or 'N/A' }}
+        </p>
+      </div>
+      <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+        <a href="{{ url_for('page1_teacher') }}" class="btn btn-outline btn-sm">&larr; Edit Course Info</a>
+        <button type="button" id="btnPage2PdfTop" class="btn btn-outline btn-sm" style="display: none; color: #dc2626; border-color: #fca5a5;" onclick="openPage2PdfModal()">📄 Download Assessment PDF</button>
+        <a href="{{ url_for('page3_copo') }}" id="btnGoToStep3" class="btn btn-primary btn-sm" style="display: none;">Continue to CO-PO Mapping &rarr;</a>
+      </div>
+    </div>
+  </div>
+
+  <!-- Weights Configuration Banner -->
+  <div class="card mb-16" style="padding: 14px 20px; background: #f8fafc;">
+    <div class="flex-between">
+      <div>
+        <strong style="color: var(--primary); font-size: 14px;">Attainment Weightage Configuration:</strong>
+        <span style="font-size: 13px; color: var(--text-muted); margin-left: 8px;">
+          OBE standard weightage is 80% Direct Assessment and 20% Indirect Assessment.
+        </span>
+      </div>
+      <div style="display: flex; align-items: center; gap: 12px;">
+        <label style="font-size: 13px; font-weight: 600;">
+          Direct Weight (%):
+          <input type="number" id="directWeightInput" class="form-control" style="width: 70px; display: inline-block; padding: 4px 8px; margin-left: 4px;" value="80" min="0" max="100" onchange="handleWeightChange()">
+        </label>
+        <label style="font-size: 13px; font-weight: 600;">
+          Indirect Weight (%):
+          <input type="number" id="indirectWeightInput" class="form-control" style="width: 70px; display: inline-block; padding: 4px 8px; margin-left: 4px;" value="20" min="0" max="100" onchange="handleWeightChange()">
+        </label>
+        <span id="weightSumBadge" class="badge" style="background: #e2e8f0; font-size: 12px;">Total: 100%</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Section 1: Direct Assessment Data Upload & Configuration -->
+  <div class="card">
+    <div class="card-header">
+      <div>
+        <h2 class="card-title">1. Direct Assessment Marks (Internal &amp; External)</h2>
+        <p class="card-subtitle">Upload CSV, TSV, or XLSX file or paste data. Supports Unit Tests, CCE, Insem, Prelim, and ESE.</p>
+      </div>
+    </div>
+
+    <!-- Upload Tabs -->
+    <div class="tabs">
+      <button type="button" class="tab-btn active" onclick="switchDirectTab('file')">Upload File (CSV, TSV, XLSX)</button>
+      <button type="button" class="tab-btn" onclick="switchDirectTab('paste')">Paste Spreadsheet Data</button>
+    </div>
+
+    <div id="directFileTab" class="tab-content active">
+      <div style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap;">
+        <input type="file" id="directFileInput" accept=".csv, .tsv, .txt, .xlsx, .xls" class="form-control" style="max-width: 360px;" onchange="handleFileSelected('directFileInput', 'directFileBadge')">
+        <div id="directFileBadge" class="file-chosen-badge" style="display: none;">
+          <span id="directFileBadgeName" class="file-name-text"></span>
+          <button type="button" class="btn-clear-file" onclick="clearFileSelection('directFileInput', 'directFileBadge', 'directErrorAlert')" title="Remove selected file">&times;</button>
+        </div>
+        <button type="button" class="btn btn-primary" onclick="uploadDirectFile()">Parse Direct Marks</button>
+        <span style="font-size: 12px; color: var(--text-muted);">Max file size: 16MB</span>
+      </div>
+    </div>
+
+    <div id="directPasteTab" class="tab-content">
+      <div class="form-group">
+        <label class="form-label">Paste rows directly from Excel / Google Sheets (with headers):</label>
+        <textarea id="directPasteInput" class="form-control" rows="5" placeholder="Roll No&#9;Student Name&#9;UT1&#9;CCE1&#9;Insem&#10;101&#9;Aarav Sharma&#9;18&#9;9&#9;26"></textarea>
+      </div>
+      <button type="button" class="btn btn-primary btn-sm" onclick="uploadDirectPasted()">Parse Pasted Direct Data</button>
+    </div>
+
+    <!-- Direct Status Alerts -->
+    <div id="directErrorAlert" class="alert alert-error mt-16" style="display: none; white-space: pre-line;"></div>
+    <div id="directSuccessAlert" class="alert alert-success mt-16" style="display: none; white-space: pre-line;"></div>
+    <div id="directWarningAlert" class="alert alert-warning mt-16" style="display: none; white-space: pre-line;"></div>
+
+    <!-- Assessment Column Configuration Card -->
+    <div id="columnConfigSection" class="mt-24" style="display: none;">
+      <div class="flex-between mb-12">
+        <div>
+          <h3 style="font-size: 15px; font-weight: 700; color: var(--primary);">Assessment Columns Setup &amp; CO Mapping</h3>
+          <p style="font-size: 12.5px; color: var(--text-muted); margin-top: 2px;">
+            Verify or adjust the Maximum Marks and CO mapping below. Uncheck any column to exclude it.
+          </p>
+        </div>
+      </div>
+
+      <div id="columnConfigGrid" class="grid-3 mb-16">
+        <!-- Dynamically populated column cards -->
+      </div>
+
+      <div class="flex-between">
+        <div style="display: flex; gap: 12px; align-items: center;">
+          <label style="font-size: 13px; font-weight: 600;">Passing Threshold Ratio:</label>
+          <select id="passingThresholdSelect" class="form-control" style="width: auto; padding: 4px 8px;">
+            <option value="0.50" selected>50% of Maximum Marks (GAPC/OBE Standard)</option>
+            <option value="0.40">40% of Maximum Marks</option>
+            <option value="0.60">60% of Maximum Marks</option>
+          </select>
+        </div>
+        <div>
+          <button type="button" class="btn btn-success" onclick="calculateDirectAttainment()">
+            &check; Validate &amp; Calculate Direct Attainment
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Direct Marks Large Editable Table -->
+    <div id="directTableSection" class="mt-24" style="display: none;">
+      <div class="flex-between mb-12">
+        <h3 style="font-size: 15px; font-weight: 700; color: var(--primary);">
+          Editable Student Marks (<span id="directStudentCount">0</span> Students)
+        </h3>
+        <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+          <button type="button" class="btn btn-outline btn-sm" id="btnFixNegative" onclick="fixNegativeMarks()" style="display: none; color: #b45309; border-color: #f59e0b;">&#9888; Auto-Fix Negative Marks (&rarr; 0)</button>
+          <button type="button" class="btn btn-outline btn-sm" onclick="addDirectRow()">+ Add Student Row</button>
+          <button type="button" class="btn btn-outline btn-sm" onclick="calculateDirectAttainment()">Re-calculate</button>
+        </div>
+      </div>
+
+      <div class="table-responsive" style="max-height: 400px; overflow-y: auto;">
+        <table class="table table-editable table-sm" id="directMarksTable">
+          <thead>
+            <!-- Populated dynamically -->
+          </thead>
+          <tbody>
+            <!-- Populated dynamically -->
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Direct Attainment Live Results & Summaries -->
+  <div id="directResultsSection" style="display: none;">
+    
+    <!-- Stat Summary Cards -->
+    <div class="grid-4 mb-16">
+      <div class="stat-card">
+        <div class="stat-val" id="statDirectAppeared">0</div>
+        <div class="stat-label">Total Evaluated Students</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-val" id="statDirectPassed">0</div>
+        <div class="stat-label">Students Passed (>=50%)</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-val" id="statDirectAvgScore">0%</div>
+        <div class="stat-label">Average Student Performance</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-val" id="statDirectCOCount">0</div>
+        <div class="stat-label">Mapped Course Outcomes</div>
+      </div>
+    </div>
+
+    <!-- Direct CO Summary Table -->
+    <div class="card mb-16">
+      <div class="card-header">
+        <div>
+          <h3 class="card-title">Direct Course Outcome (CO) Summary</h3>
+          <p class="card-subtitle">OBE direct attainment levels with distinct Internal (CCE/UT) vs ESE breakdown and GAPC 4.0 level points.</p>
+        </div>
+        <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+          <button type="button" class="btn btn-sm" style="background: #dc2626; border-color: #dc2626; color: #fff; font-weight: 600;" onclick="openPage2PdfModal()">
+            📄 Download Assessment PDF
+          </button>
+          <a href="{{ url_for('download_direct_report') }}" class="btn btn-outline btn-sm">
+            &darr; Direct Excel (.xlsx)
+          </a>
+        </div>
+      </div>
+      <!-- GAPC 4.0 Attainment Criteria & Level Lookup Table Guide -->
+      <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px 14px; margin: 0 16px 14px 16px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; cursor: pointer;" onclick="const el = document.getElementById('gapcGuideContent'); el.style.display = el.style.display === 'none' ? 'block' : 'none';">
+          <span style="font-weight: 700; color: #1e293b; font-size: 13px;">📋 GAPC 4.0 Guidelines &amp; Attainment Level Lookup Table</span>
+          <span style="font-size: 12px; color: #64748b; font-weight: 600;">(Click to Toggle Reference Table) ▾</span>
+        </div>
+        <div id="gapcGuideContent" style="display: none; margin-top: 10px; font-size: 12px; color: #334155;">
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 8px; margin-bottom: 10px;">
+            <div style="background:#dcfce7; border: 1px solid #86efac; border-radius: 6px; padding: 6px 10px;">
+              <strong style="color:#166534;">Level 3:</strong> ≥80% students scoring ≥50% marks<br>
+              <span style="font-size:11px; color:#14532d;">Fixed Level: <strong>3.0</strong></span>
+            </div>
+            <div style="background:#e0f2fe; border: 1px solid #7dd3fc; border-radius: 6px; padding: 6px 10px;">
+              <strong style="color:#075985;">Level 2:</strong> 70% to &lt;80% students scoring ≥50%<br>
+              <span style="font-size:11px; color:#0c4a6e;">Level points: <strong>2.0 to 2.9</strong> (2 + (% - 70)/10)</span>
+            </div>
+            <div style="background:#fef9c3; border: 1px solid #fde047; border-radius: 6px; padding: 6px 10px;">
+              <strong style="color:#854d0e;">Level 1:</strong> 60% to &lt;70% students scoring ≥50%<br>
+              <span style="font-size:11px; color:#713f12;">Level points: <strong>1.0 to 1.9</strong> (1 + (% - 60)/10)</span>
+            </div>
+            <div style="background:#ffedd5; border: 1px solid #fed7aa; border-radius: 6px; padding: 6px 10px;">
+              <strong style="color:#9a3412;">Level 0-1:</strong> 0% to &lt;60% students scoring ≥50%<br>
+              <span style="font-size:11px; color:#7c2d12;">Level points: <strong>0.0 to 1.0</strong> ((% × 1)/60, not fixed to 0)</span>
+            </div>
+          </div>
+          <div style="font-size:11.5px; background: white; border: 1px solid #e2e8f0; border-radius: 6px; padding: 8px 12px;">
+            <strong>Exact Points Lookup Table:</strong>
+            <div style="display: flex; flex-wrap: wrap; gap: 8px 14px; margin-top: 4px; font-family: monospace; font-size: 11px;">
+              <span>60% &rarr; <strong>1.0</strong></span>
+              <span>61% &rarr; <strong>1.1</strong></span>
+              <span>65% &rarr; <strong>1.5</strong></span>
+              <span>67% &rarr; <strong>1.7</strong></span>
+              <span>69% &rarr; <strong>1.9</strong></span>
+              <span>70% &rarr; <strong>2.0</strong></span>
+              <span>71% &rarr; <strong>2.1</strong></span>
+              <span>75% &rarr; <strong>2.5</strong></span>
+              <span>79% &rarr; <strong>2.9</strong></span>
+              <span>≥80% &rarr; <strong>3.0</strong></span>
+            </div>
+            <div style="margin-top: 6px; font-size: 11px; color: #64748b;">
+              <em>Example: For 35% students passing &rarr; Attainment = (35 × 1) / 60 = <strong>0.58</strong> &rarr; Level: <strong>Level 0-1 (0.58)</strong>.</em>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="table-responsive">
+        <table class="table" id="directCOSummaryTable">
+          <thead>
+            <tr>
+              <th>Course Outcome</th>
+              <th>Mapped Assessments</th>
+              <th>Students Passed (%)</th>
+              <th style="background:#fef3c7; color:#92400e;">Internal (CCE/UT) Attainment</th>
+              <th style="background:#ede9fe; color:#5b21b6;">ESE (External) Attainment</th>
+              <th style="background:#e0f2fe; color:#0369a1;">Direct Attainment (Points)</th>
+              <th>Attainment Level (Points)</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Test / CCE / Unit Test Passing Summaries Table -->
+    <div class="card mb-16">
+      <div class="card-header">
+        <div>
+          <h3 class="card-title">Assessment Tools Passing Summary (Internal CCE/UT vs ESE Exam)</h3>
+          <p class="card-subtitle">Performance breakdown for each evaluation tool: tests, CCE assignments, and end semester exams.</p>
+        </div>
+      </div>
+      <div class="table-responsive">
+        <table class="table" id="assessmentSummaryTable">
+          <thead>
+            <tr>
+              <th>Assessment Name</th>
+              <th>Mapped COs</th>
+              <th>Max Marks</th>
+              <th>Passing Mark (50%)</th>
+              <th>Appeared</th>
+              <th>Passed</th>
+              <th>Failed</th>
+              <th>Pass %</th>
+              <th>Average Marks</th>
+              <th>Min Scored</th>
+              <th>Max Scored</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Student-wise Percentages & Passing COs Table -->
+    <div class="card mb-16">
+      <div class="card-header">
+        <div>
+          <h3 class="card-title">Student Performance &amp; Passing COs</h3>
+          <p class="card-subtitle">Simplified breakdown of total marks, percentages, and passed COs per student.</p>
+        </div>
+        <div>
+          <a href="{{ url_for('download_students_report') }}" class="btn btn-outline btn-sm">&darr; Download Students Report (.xlsx)</a>
+        </div>
+      </div>
+      <div class="table-responsive" style="max-height: 350px; overflow-y: auto;">
+        <table class="table table-sm" id="studentPerformanceTable">
+          <thead>
+            <tr>
+              <th>Roll No</th>
+              <th>Student Name</th>
+              <th>Total Marks</th>
+              <th>Percentage (%)</th>
+              <th>Passed COs</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Live Graphs for Direct Assessment (Separate, Independent Cards to Prevent Collision) -->
+    <div style="margin-top: 24px; margin-bottom: 8px;">
+      <h3 style="font-size: 16px; font-weight: 700; color: var(--primary); margin-bottom: 4px;">Direct Assessment Visual Analytics</h3>
+      <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 16px;">Independent graphical representations for each direct evaluation dimension.</p>
+    </div>
+
+    <!-- Direct Graph 1: Students Passing Each CO -->
+    <div class="graph-card">
+      <div class="graph-header">
+        <div>
+          <h4 class="graph-title">Graph 1: Students Passing Each Course Outcome (CO)</h4>
+          <p class="graph-subtitle">Count of students achieving &ge; 50% threshold on assessments mapped to each CO</p>
+        </div>
+        <div>
+          <span class="badge badge-level-2">Direct CO Passing Count</span>
+        </div>
+      </div>
+      <div class="chart-canvas-wrapper">
+        <canvas id="chartCOPassing"></canvas>
+      </div>
+    </div>
+
+    <!-- Direct Graph 2: Direct CO Attainment Values -->
+    <div class="graph-card">
+      <div class="graph-header">
+        <div>
+          <h4 class="graph-title">Graph 2: Direct Course Outcome Attainment Levels (0-3 Continuous Scale)</h4>
+          <p class="graph-subtitle">Continuous OBE attainment score calculated using GAPC 4.0 guidelines based on passing %</p>
+        </div>
+        <div>
+          <span class="badge badge-level-3">Continuous Attainment (0-3)</span>
+        </div>
+      </div>
+      <div class="chart-canvas-wrapper">
+        <canvas id="chartDirectAttainment"></canvas>
+      </div>
+    </div>
+
+    <!-- Direct Graph 3: Student Overall Performance Distribution -->
+    <div class="graph-card">
+      <div class="graph-header">
+        <div>
+          <h4 class="graph-title">Graph 3: Student Overall Performance Score Distribution</h4>
+          <p class="graph-subtitle">Histogram breakdown of student percentage ranges (&ge;80%, 70-79%, 60-69%, 50-59%, &lt;50%)</p>
+        </div>
+        <div>
+          <span class="badge" style="background: #e0e7ff; color: #3730a3; border-color: #c7d2fe;">Score Ranges</span>
+        </div>
+      </div>
+      <div class="chart-canvas-wrapper">
+        <canvas id="chartStudentPerformance"></canvas>
+      </div>
+    </div>
+
+    <!-- Direct Graph 4: Assessment-wise Passing Rate -->
+    <div class="graph-card">
+      <div class="graph-header">
+        <div>
+          <h4 class="graph-title">Graph 4: Assessment Tools Pass Percentage (%)</h4>
+          <p class="graph-subtitle">Success rate across each individual test, CCE assignment, unit test, insem, and end-sem exam</p>
+        </div>
+        <div>
+          <span class="badge" style="background: #fef3c7; color: #92400e; border-color: #fde68a;">Test Tool Success %</span>
+        </div>
+      </div>
+      <div class="chart-canvas-wrapper">
+        <canvas id="chartAssessmentPassRate"></canvas>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Section 2: Indirect Assessment (Course Exit Survey / Feedback) -->
+  <div class="card mt-24">
+    <div class="card-header">
+      <div>
+        <h2 class="card-title">2. Indirect Assessment Data (Exit Survey / Student Feedback)</h2>
+        <p class="card-subtitle">Upload feedback survey ratings in CSV, TSV, or XLSX format.</p>
+      </div>
+    </div>
+
+    <!-- Mapping Target Selection (CO vs PO) -->
+    <div class="mb-16" style="background: #f8fafc; padding: 12px 16px; border-radius: 8px; border: 1px solid var(--border-color); display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px;">
+      <div>
+        <strong style="font-size: 13.5px; color: var(--primary);">Indirect Assessment Mapping Target:</strong>
+        <p style="font-size: 12px; color: var(--text-muted); margin-top: 2px;">
+          Select how student survey ratings should be mapped and evaluated:
+        </p>
+      </div>
+      <div style="display: flex; gap: 16px; align-items: center;">
+        <label style="font-size: 13px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 6px;">
+          <input type="radio" name="indirectMappingTarget" value="CO" checked onchange="handleIndirectTargetChange()">
+          <span>Course Outcomes (CO1, CO2, CO3...)</span>
+        </label>
+        <label style="font-size: 13px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 6px;">
+          <input type="radio" name="indirectMappingTarget" value="PO" onchange="handleIndirectTargetChange()">
+          <span>Program Outcomes (PO1, PO2... PO12)</span>
+        </label>
+      </div>
+    </div>
+
+    <div class="tabs">
+      <button type="button" class="tab-btn active" onclick="switchIndirectTab('file')">Upload Indirect File</button>
+      <button type="button" class="tab-btn" onclick="switchIndirectTab('paste')">Paste Indirect Survey Data</button>
+    </div>
+
+    <div id="indirectFileTab" class="tab-content active">
+      <div style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap;">
+        <input type="file" id="indirectFileInput" accept=".csv, .tsv, .txt, .xlsx, .xls" class="form-control" style="max-width: 360px;" onchange="handleFileSelected('indirectFileInput', 'indirectFileBadge')">
+        <div id="indirectFileBadge" class="file-chosen-badge" style="display: none;">
+          <span id="indirectFileBadgeName" class="file-name-text"></span>
+          <button type="button" class="btn-clear-file" onclick="clearFileSelection('indirectFileInput', 'indirectFileBadge', 'indirectErrorAlert')" title="Remove selected file">&times;</button>
+        </div>
+        <button type="button" class="btn btn-primary" onclick="uploadIndirectFile()">Parse Indirect Data</button>
+      </div>
+    </div>
+
+    <div id="indirectPasteTab" class="tab-content">
+      <div class="form-group">
+        <label class="form-label">Paste feedback table (Roll No, Name, CO1, CO2, CO3...):</label>
+        <textarea id="indirectPasteInput" class="form-control" rows="5" placeholder="Roll No&#9;Student Name&#9;CO1&#9;CO2&#9;CO3&#9;CO4&#10;101&#9;Aarav Sharma&#9;9&#9;8&#9;8&#9;9"></textarea>
+      </div>
+      <button type="button" class="btn btn-primary btn-sm" onclick="uploadIndirectPasted()">Parse Pasted Indirect Data</button>
+    </div>
+
+    <!-- Indirect Error Alert -->
+    <div id="indirectErrorAlert" class="alert alert-error mt-16" style="display: none; white-space: pre-line;"></div>
+
+    <!-- Indirect Setup & Controls -->
+    <div id="indirectConfigSection" class="mt-16" style="display: none;">
+      <div class="flex-between mb-12">
+        <div style="display: flex; align-items: center; gap: 12px;">
+          <label style="font-weight: 600; font-size: 13px;">Maximum Rating Scale:</label>
+          <input type="number" id="indirectMaxRatingInput" class="form-control" style="width: 80px; display: inline-block;" value="10" min="1" max="100">
+          <span style="font-size: 12px; color: var(--text-muted);">(e.g. 5 point or 10 point scale)</span>
+        </div>
+        <button type="button" class="btn btn-success" onclick="calculateIndirectAttainment()">
+          &check; Validate &amp; Calculate Indirect Attainment
+        </button>
+      </div>
+
+      <!-- Detected COs badge list -->
+      <div class="mb-12">
+        <span style="font-size: 12.5px; font-weight: 600; color: var(--text-muted);">Detected CO Columns (Non-CO columns ignored):</span>
+        <div id="detectedCOsList" style="display: inline-flex; gap: 6px; margin-left: 8px;"></div>
+      </div>
+
+      <!-- Editable Indirect Ratings Table -->
+      <div class="table-responsive" style="max-height: 320px; overflow-y: auto;">
+        <table class="table table-editable table-sm" id="indirectRatingsTable">
+          <thead></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Indirect Attainment Results -->
+  <div id="indirectResultsSection" style="display: none;" class="mt-16">
+    <div class="card">
+      <div class="card-header">
+        <div>
+          <h3 class="card-title">Indirect Course Outcome (CO) Summary</h3>
+          <p class="card-subtitle">Survey response count, average rating, rating percentage, and attainment level.</p>
+        </div>
+      </div>
+      <div class="table-responsive">
+        <table class="table" id="indirectCOSummaryTable">
+          <thead>
+            <tr>
+              <th>Course Outcome</th>
+              <th>Survey Responses</th>
+              <th>Max Rating Scale</th>
+              <th>Average Rating</th>
+              <th>Rating Percentage (%)</th>
+              <th>Indirect Attainment (0-3)</th>
+              <th>Attainment Level</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Live Graphs for Indirect Assessment (Separate, Independent Cards) -->
+    <div style="margin-top: 24px; margin-bottom: 8px;">
+      <h3 style="font-size: 16px; font-weight: 700; color: var(--primary); margin-bottom: 4px;">Indirect Survey Visual Analytics</h3>
+      <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 16px;">Independent graphical representations for indirect feedback metrics.</p>
+    </div>
+
+    <!-- Indirect Graph 1: Indirect Rating Percentage (%) -->
+    <div class="graph-card">
+      <div class="graph-header">
+        <div>
+          <h4 class="graph-title">Graph 5: Indirect Feedback Rating Percentage (%) per CO</h4>
+          <p class="graph-subtitle">Average student survey rating converted to percentage against the maximum rating scale</p>
+        </div>
+        <div>
+          <span class="badge" style="background: #ede9fe; color: #5b21b6; border-color: #ddd6fe;">Survey Rating %</span>
+        </div>
+      </div>
+      <div class="chart-canvas-wrapper">
+        <canvas id="chartIndirectRatingPct"></canvas>
+      </div>
+    </div>
+
+    <!-- Indirect Graph 2: Indirect CO Attainment Values -->
+    <div class="graph-card">
+      <div class="graph-header">
+        <div>
+          <h4 class="graph-title">Graph 6: Indirect Course Outcome Attainment Levels (0-3 Scale)</h4>
+          <p class="graph-subtitle">Continuous OBE attainment level derived from exit survey rating percentages</p>
+        </div>
+        <div>
+          <span class="badge badge-level-2">Indirect Attainment (0-3)</span>
+        </div>
+      </div>
+      <div class="chart-canvas-wrapper">
+        <canvas id="chartIndirectAttainment"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <!-- Section 3: Weighted Combined Direct & Indirect Calculations -->
+  <div id="weightedSection" class="card mt-24" style="display: none;">
+    <div class="card-header">
+      <div>
+        <h2 class="card-title">3. Combined Weighted Course Outcome Attainment</h2>
+        <p class="card-subtitle">
+          Direct Contribution = Direct % &times; Direct Wt / 100 &bull;
+          Indirect Contribution = Indirect % &times; Indirect Wt / 100 &bull;
+          Combined Attainment = Combined % / 100 &times; 3
+        </p>
+      </div>
+      <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+        <button type="button" class="btn btn-sm" style="background: #dc2626; border-color: #dc2626; color: #fff; font-weight: 600;" onclick="openPage2PdfModal()">
+          📄 Download Assessment PDF
+        </button>
+        <span class="badge" id="overallCombinedBadge" style="font-size: 14px; padding: 6px 12px; background: #dbeafe; color: #1e40af; border-color: #93c5fd;">
+          Overall: - / 3.00
+        </span>
+      </div>
+    </div>
+
+    <div class="table-responsive">
+      <table class="table" id="weightedCOTable">
+        <thead>
+          <tr>
+            <th>Course Outcome</th>
+            <th>Direct %</th>
+            <th>Direct Contrib (%)</th>
+            <th>Direct Attainment</th>
+            <th>Indirect %</th>
+            <th>Indirect Contrib (%)</th>
+            <th>Indirect Attainment</th>
+            <th>Combined %</th>
+            <th>Combined Attainment (Points)</th>
+            <th>Attainment Level (Points)</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+
+    <!-- Combined Attainment Chart (Independent Card) -->
+    <div class="graph-card mt-24">
+      <div class="graph-header">
+        <div>
+          <h4 class="graph-title">Graph 7: Course Outcome Attainment Comparison (Direct vs. Indirect vs. Combined)</h4>
+          <p class="graph-subtitle">Multi-bar comparison showing direct contribution, indirect feedback, and combined weighted attainment per CO</p>
+        </div>
+        <div>
+          <span class="badge" style="background: #dbeafe; color: #1e40af; border-color: #93c5fd;">Weighted OBE Comparison</span>
+        </div>
+      </div>
+      <div class="chart-canvas-wrapper" style="height: 230px;">
+        <canvas id="chartCombinedAttainment"></canvas>
+      </div>
+    </div>
+
+    <!-- Action bar to proceed to Step 3 -->
+    <div class="mt-24 text-right">
+      <a href="{{ url_for('page3_copo') }}" class="btn btn-primary btn-lg">
+        Proceed to Step 3: CO-PO Mapping &rarr;
+      </a>
+    </div>
+  </div>
+
+  <!-- Interactive Modal for Page 2 Assessment PDF Download Options (Graphs or Tables) -->
+  <div id="page2PdfModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(15,23,42,0.6); z-index: 9999; align-items: center; justify-content: center;">
+    <div class="card" style="max-width: 440px; width: 90%; background: #ffffff; padding: 22px; border-radius: 12px; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.3);">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+        <h3 style="font-size: 16.5px; font-weight: 700; color: var(--primary); margin: 0;">Download Assessment PDF</h3>
+        <button type="button" onclick="closePage2PdfModal()" style="background: none; border: none; font-size: 22px; cursor: pointer; color: var(--text-muted); line-height: 1;">&times;</button>
+      </div>
+      <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 14px;">
+        Would you like to include visual analytics and comparison charts in the generated Assessment PDF?
+      </p>
+      <div style="background: #f8fafc; padding: 12px 14px; border-radius: 8px; border: 1px solid var(--border-color); margin-bottom: 18px;">
+        <label style="display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; cursor: pointer; margin-bottom: 10px;">
+          <input type="radio" name="page2PdfChartOption" value="1" checked>
+          <span>Include Visual Charts &amp; Analytics (With Graphs)</span>
+        </label>
+        <label style="display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; cursor: pointer;">
+          <input type="radio" name="page2PdfChartOption" value="0">
+          <span>Accreditation Tables Only (Without Graphs)</span>
+        </label>
+      </div>
+      <div style="display: flex; justify-content: flex-end; gap: 10px;">
+        <button type="button" class="btn btn-outline btn-sm" onclick="closePage2PdfModal()">Cancel</button>
+        <button type="button" class="btn btn-primary btn-sm" style="background: #dc2626; border-color: #dc2626; color: #fff;" onclick="proceedPage2PdfDownload()">
+          &darr; Download PDF
+        </button>
+      </div>
+    </div>
+  </div>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/app.js') }}"></script>
+{% endblock %}

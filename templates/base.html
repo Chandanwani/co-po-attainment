@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}CO-PO Attainment System{% endblock %}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+  <script src="{{ url_for('static', filename='js/chart.umd.min.js') }}"></script>
+  {% block extra_head %}{% endblock %}
+</head>
+<body>
+
+  {# Explicit requirement: Do not use a navigation bar on the first page #}
+  {% if page_step and page_step > 1 %}
+  <header class="steps-nav">
+    <div class="steps-list">
+      <a href="{{ url_for('page1_teacher') }}" class="step-item {% if page_step == 1 %}active{% endif %}">
+        <span class="step-badge">1</span> Teacher &amp; Course
+      </a>
+      <span class="step-divider">&rarr;</span>
+      <a href="{{ url_for('page2_assessment') }}" class="step-item {% if page_step == 2 %}active{% endif %}">
+        <span class="step-badge">2</span> Assessment Data
+      </a>
+      <span class="step-divider">&rarr;</span>
+      <a href="{{ url_for('page3_copo') }}" class="step-item {% if page_step == 3 %}active{% endif %}">
+        <span class="step-badge">3</span> CO-PO Mapping
+      </a>
+      <span class="step-divider">&rarr;</span>
+      <a href="{{ url_for('page4_report') }}" class="step-item {% if page_step == 4 %}active{% endif %}">
+        <span class="step-badge">4</span> Final Report
+      </a>
+    </div>
+  </header>
+  {% endif %}
+
+  <main>
+    {% block content %}{% endblock %}
+  </main>
+
+  <footer style="text-align: center; padding: 24px 10px; color: var(--text-muted); font-size: 12px; border-top: 1px solid var(--border-color); margin-top: 40px;">
+    Outcome-Based Education (OBE) &bull; CO-PO Attainment System &bull; GAPC 4.0 / NBA Accredited Guidelines
+  </footer>
+
+  <script>
+    function handleFileSelected(inputId, badgeId) {
+      const inp = document.getElementById(inputId);
+      const badge = document.getElementById(badgeId);
+      if (inp && inp.files && inp.files.length > 0) {
+        const fname = inp.files[0].name;
+        const nameEl = document.getElementById(badgeId + 'Name');
+        if (nameEl) nameEl.textContent = fname;
+        if (badge) badge.style.display = 'inline-flex';
+      } else {
+        if (badge) badge.style.display = 'none';
+      }
+    }
+
+    function clearFileSelection(inputId, badgeId, alertId) {
+      const inp = document.getElementById(inputId);
+      if (inp) inp.value = '';
+      const badge = document.getElementById(badgeId);
+      if (badge) badge.style.display = 'none';
+      if (alertId) {
+        const alertEl = document.getElementById(alertId);
+        if (alertEl) alertEl.style.display = 'none';
+      }
+    }
+  </script>
+
+  {% block scripts %}{% endblock %}
+</body>
+</html>
