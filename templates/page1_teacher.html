@@ -111,9 +111,12 @@
         </div>
       </div>
 
-      <div style="margin-top: 24px;">
-        <button type="submit" id="btnContinue" class="btn btn-primary btn-lg" style="width: 100%;">
+      <div style="margin-top: 24px; display: flex; gap: 12px; align-items: center;">
+        <button type="submit" id="btnContinue" class="btn btn-primary btn-lg" style="flex: 2;">
           Save &amp; Continue to Assessment Data &rarr;
+        </button>
+        <button type="button" class="btn btn-outline btn-lg" style="flex: 1; color: #64748b; border-color: #cbd5e1;" onclick="clearTeacherForm()">
+          🔄 Clear Form
         </button>
       </div>
     </form>
@@ -130,6 +133,19 @@ if (urlParams.get('new') === '1') {
   if (typeof localStorage !== 'undefined') {
     localStorage.removeItem('copo_attainment_state');
   }
+}
+
+function clearTeacherForm() {
+  document.getElementById('faculty_name').value = '';
+  document.getElementById('subject').value = '';
+  document.getElementById('class_name').value = '';
+  document.getElementById('division').value = '';
+  document.getElementById('semester').value = '';
+  document.getElementById('academic_year').value = '';
+  if (typeof localStorage !== 'undefined') {
+    localStorage.removeItem('copo_attainment_state');
+  }
+  fetch('/api/reset-session', { method: 'POST' }).catch(() => {});
 }
 
 // Pre-fill from localStorage if values are not already rendered by server

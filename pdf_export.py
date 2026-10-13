@@ -222,10 +222,34 @@ def create_po_barchart_drawing(copo: Dict[str, Any]) -> Any:
     return d
 
 
+def draw_page_decorations(canvas, doc):
+    """Draws a running header and footer on every page of the report."""
+    canvas.saveState()
+    canvas.setFont("Helvetica-Bold", 8)
+    canvas.setFillColor(colors.HexColor('#1E3A8A'))
+    canvas.drawString(36, 11 * inch - 26, "D. Y. PATIL COLLEGE OF ENGINEERING, AKURDI, PUNE - 411044")
+    canvas.setFont("Helvetica", 7)
+    canvas.setFillColor(colors.HexColor('#64748B'))
+    canvas.drawRightString(8.5 * inch - 36, 11 * inch - 26, "Accreditation Attainment Report")
+    
+    # Thin rule under running header
+    canvas.setStrokeColor(colors.HexColor('#CBD5E1'))
+    canvas.setLineWidth(0.4)
+    canvas.line(36, 11 * inch - 30, 8.5 * inch - 36, 11 * inch - 30)
+    
+    # Running Footer
+    canvas.setFont("Helvetica", 7.5)
+    canvas.drawString(36, 22, "Outcome-Based Education (OBE) • CO-PO Attainment System")
+    canvas.drawRightString(8.5 * inch - 36, 22, f"Page {doc.page}")
+    canvas.line(36, 32, 8.5 * inch - 36, 32)
+    canvas.restoreState()
+
+
 def create_pdf_report(report_data: Dict[str, Any], include_charts: bool = True, section: str = "all") -> io.BytesIO:
     """
     Builds the accreditation-ready final PDF report.
     Includes DYP Akurdi header, 2-line faculty information, and comprehensive tables and charts.
+    Hides ESE column if no ESE assessment exists, uses clean thin table borders, and includes running header on every page.
     """
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(
@@ -233,8 +257,8 @@ def create_pdf_report(report_data: Dict[str, Any], include_charts: bool = True, 
         pagesize=letter,
         rightMargin=36,
         leftMargin=36,
-        topMargin=32,
-        bottomMargin=32
+        topMargin=42,
+        bottomMargin=42
     )
 
     styles = getSampleStyleSheet()
@@ -243,8 +267,8 @@ def create_pdf_report(report_data: Dict[str, Any], include_charts: bool = True, 
         'DocTitle',
         parent=styles['Heading1'],
         fontName='Helvetica-Bold',
-        fontSize=14,
-        leading=18,
+        fontSize=13,
+        leading=16,
         textColor=colors.HexColor('#0F172A'),
         alignment=1,
         spaceAfter=4
@@ -254,10 +278,10 @@ def create_pdf_report(report_data: Dict[str, Any], include_charts: bool = True, 
         'DocH2',
         parent=styles['Heading2'],
         fontName='Helvetica-Bold',
-        fontSize=11,
-        leading=14,
+        fontSize=10,
+        leading=13,
         textColor=colors.HexColor('#1E3A8A'),
-        spaceBefore=10,
+        spaceBefore=8,
         spaceAfter=4
     )
 
@@ -265,8 +289,8 @@ def create_pdf_report(report_data: Dict[str, Any], include_charts: bool = True, 
         'BoldCell',
         parent=styles['Normal'],
         fontName='Helvetica-Bold',
-        fontSize=8,
-        leading=10,
+        fontSize=7.5,
+        leading=9.5,
         textColor=colors.HexColor('#0F172A')
     )
 
@@ -274,8 +298,8 @@ def create_pdf_report(report_data: Dict[str, Any], include_charts: bool = True, 
         'NormalCell',
         parent=styles['Normal'],
         fontName='Helvetica',
-        fontSize=8,
-        leading=10,
+        fontSize=7.5,
+        leading=9.5,
         textColor=colors.HexColor('#0F172A')
     )
 
@@ -296,6 +320,12 @@ def create_pdf_report(report_data: Dict[str, Any], include_charts: bool = True, 
     indirect = (report_data.get('indirect') or {}).get('data') or {}
     weighted = (report_data.get('weighted') or {}).get('data') or {}
     copo = report_data.get('copo') or {}
+
+    # Check if any ESE (End Semester Exam) actually exists in assessments
+    has_any_ese = any(
+        a.get('is_ese') or 'ESE' in str(a.get('name', '')).upper() or 'END' in str(a.get('name', '')).upper()
+        for a in direct.get('assessment_summaries', [])
+    ) or any(c.get('has_ese') for c in direct.get('co_summaries', []))
 
     # Fallback if weighted is not computed yet: fallback to direct COs
     if not weighted.get("combined_results") and direct.get("co_summaries"):
@@ -324,11 +354,11 @@ def create_pdf_report(report_data: Dict[str, Any], include_charts: bool = True, 
             ]
         }
 
-    # 1. Institution Header
+    # 1. Institution Header (Top of Page 1)
     elements.extend(build_institution_header(styles))
 
     # 2. Document Title
-    elements.append(Paragraph("COURSE OUTCOME & PROGRAM OUTCOME ATTAINMENT EVALUATION REPORT", title_style))
+    elements.append(Paragraph("COURSE OUTCOME &amp; PROGRAM OUTCOME ATTAINMENT EVALUATION REPORT", title_style))
     elements.append(Spacer(1, 4))
 
     # 3. Simple 2-Line Teacher Info Box
@@ -337,52 +367,78 @@ def create_pdf_report(report_data: Dict[str, Any], include_charts: bool = True, 
     elements.append(build_two_line_teacher_box(teacher, overall_att, overall_lvl, normal_cell))
     elements.append(Spacer(1, 8))
 
-    # Section 1: Direct CO Attainment Summary (with separate Internal vs ESE columns)
+    # Section 1: Direct CO Attainment Summary
     if direct.get("co_summaries"):
         elements.append(Paragraph("1. Direct Course Outcome (CO) Attainment Summary", h2_style))
-        co_headers = [
-            Paragraph("CO", header_cell),
-            Paragraph("Mapped Tools", header_cell),
-            Paragraph("Max Marks", header_cell),
-            Paragraph("Passed / Appeared", header_cell),
-            Paragraph("Pass %", header_cell),
-            Paragraph("Internal (CCE/UT)", header_cell),
-            Paragraph("ESE (External)", header_cell),
-            Paragraph("Direct Attainment", header_cell),
-            Paragraph("Attainment Level", header_cell),
-        ]
+        if has_any_ese:
+            co_headers = [
+                Paragraph("CO", header_cell),
+                Paragraph("Mapped Tools", header_cell),
+                Paragraph("Max Marks", header_cell),
+                Paragraph("Passed / Appeared", header_cell),
+                Paragraph("Pass %", header_cell),
+                Paragraph("Internal (CCE/UT)", header_cell),
+                Paragraph("ESE (External)", header_cell),
+                Paragraph("Direct Attainment", header_cell),
+                Paragraph("Attainment Level", header_cell),
+            ]
+            co_col_widths = [0.55*inch, 1.4*inch, 0.65*inch, 1.0*inch, 0.65*inch, 1.05*inch, 1.05*inch, 0.95*inch, 1.15*inch]
+        else:
+            # When NO ESE marks exist, remove ESE column completely!
+            co_headers = [
+                Paragraph("CO", header_cell),
+                Paragraph("Mapped Assessment Tools", header_cell),
+                Paragraph("Max Marks", header_cell),
+                Paragraph("Passed / Appeared", header_cell),
+                Paragraph("Pass %", header_cell),
+                Paragraph("Direct Attainment", header_cell),
+                Paragraph("Attainment Level", header_cell),
+            ]
+            co_col_widths = [0.65*inch, 2.3*inch, 0.85*inch, 1.25*inch, 0.85*inch, 1.15*inch, 1.4*inch]
+
         co_rows = [co_headers]
         for c in direct.get("co_summaries", []):
-            int_text = str(c.get('internal_attainment', '-')) if c.get('has_internal') else "N/A"
-            ese_text = str(c.get('ese_attainment', '-')) if c.get('has_ese') else "N/A"
-            co_rows.append([
-                Paragraph(str(c.get('co')), bold_cell),
-                Paragraph(str(c.get('mapped_assessments')), normal_cell),
-                Paragraph(str(c.get('max_marks')), normal_cell),
-                Paragraph(f"{c.get('students_passed')}/{c.get('students_appeared')}", normal_cell),
-                Paragraph(f"{c.get('pass_percentage')}%", bold_cell),
-                Paragraph(int_text, normal_cell),
-                Paragraph(ese_text, normal_cell),
-                Paragraph(str(c.get('attainment')), bold_cell),
-                Paragraph(str(c.get('level_label', '-')), bold_cell),
-            ])
+            if has_any_ese:
+                int_text = str(c.get('internal_attainment', '-')) if c.get('has_internal') else "N/A"
+                ese_text = str(c.get('ese_attainment', '-')) if c.get('has_ese') else "N/A"
+                co_rows.append([
+                    Paragraph(str(c.get('co')), bold_cell),
+                    Paragraph(str(c.get('mapped_assessments')), normal_cell),
+                    Paragraph(str(c.get('max_marks')), normal_cell),
+                    Paragraph(f"{c.get('students_passed')}/{c.get('students_appeared')}", normal_cell),
+                    Paragraph(f"{c.get('pass_percentage')}%", bold_cell),
+                    Paragraph(int_text, normal_cell),
+                    Paragraph(ese_text, normal_cell),
+                    Paragraph(str(c.get('attainment')), bold_cell),
+                    Paragraph(str(c.get('level_label', '-')), bold_cell),
+                ])
+            else:
+                co_rows.append([
+                    Paragraph(str(c.get('co')), bold_cell),
+                    Paragraph(str(c.get('mapped_assessments')), normal_cell),
+                    Paragraph(str(c.get('max_marks')), normal_cell),
+                    Paragraph(f"{c.get('students_passed')}/{c.get('students_appeared')}", normal_cell),
+                    Paragraph(f"{c.get('pass_percentage')}%", bold_cell),
+                    Paragraph(str(c.get('attainment')), bold_cell),
+                    Paragraph(str(c.get('level_label', '-')), bold_cell),
+                ])
 
-        co_table = Table(co_rows, colWidths=[0.55*inch, 1.4*inch, 0.65*inch, 1.0*inch, 0.65*inch, 1.05*inch, 1.05*inch, 0.95*inch, 1.15*inch])
+        co_table = Table(co_rows, colWidths=co_col_widths)
         co_table.setStyle(TableStyle([
             ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#1E293B')),
-            ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#CBD5E1')),
+            ('GRID', (0, 0), (-1, -1), 0.3, colors.HexColor('#CBD5E1')),
             ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#F8FAFC')]),
             ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
             ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-            ('TOPPADDING', (0, 0), (-1, -1), 2.5),
-            ('BOTTOMPADDING', (0, 0), (-1, -1), 2.5),
+            ('TOPPADDING', (0, 0), (-1, -1), 2),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 2),
         ]))
         elements.append(co_table)
         elements.append(Spacer(1, 8))
 
     # Section 2: Assessment Tools Summary
     if direct.get("assessment_summaries"):
-        elements.append(Paragraph("2. Assessment Tools Breakdown (Internal vs External)", h2_style))
+        elements.append(Paragraph("2. Assessment Tools Breakdown", h2_style))
         ass_headers = [
             Paragraph("Tool Name", header_cell),
             Paragraph("Mapped COs", header_cell),
@@ -411,12 +467,12 @@ def create_pdf_report(report_data: Dict[str, Any], include_charts: bool = True, 
         ass_table = Table(ass_rows, colWidths=[1.1*inch, 1.0*inch, 0.75*inch, 0.8*inch, 0.65*inch, 0.65*inch, 0.65*inch, 0.75*inch, 1.05*inch])
         ass_table.setStyle(TableStyle([
             ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#0F766E')),
-            ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#CBD5E1')),
+            ('GRID', (0, 0), (-1, -1), 0.3, colors.HexColor('#CBD5E1')),
             ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#F8FAFC')]),
             ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
             ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-            ('TOPPADDING', (0, 0), (-1, -1), 2.5),
-            ('BOTTOMPADDING', (0, 0), (-1, -1), 2.5),
+            ('TOPPADDING', (0, 0), (-1, -1), 2),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 2),
         ]))
         elements.append(ass_table)
         elements.append(Spacer(1, 8))
@@ -453,19 +509,19 @@ def create_pdf_report(report_data: Dict[str, Any], include_charts: bool = True, 
         w_table = Table(w_rows, colWidths=[0.5*inch, 0.7*inch, 0.85*inch, 0.75*inch, 0.7*inch, 0.85*inch, 0.75*inch, 0.7*inch, 1.1*inch, 1.1*inch])
         w_table.setStyle(TableStyle([
             ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#1E293B')),
-            ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#CBD5E1')),
+            ('GRID', (0, 0), (-1, -1), 0.3, colors.HexColor('#CBD5E1')),
             ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#F8FAFC')]),
             ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
             ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-            ('TOPPADDING', (0, 0), (-1, -1), 2.5),
-            ('BOTTOMPADDING', (0, 0), (-1, -1), 2.5),
+            ('TOPPADDING', (0, 0), (-1, -1), 2),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 2),
         ]))
         elements.append(w_table)
         elements.append(Spacer(1, 8))
 
     # Section 4a: CO-PO & PSO Correlation Matrix (PO1..PO11, PSO1..PSO3)
     if copo.get("matrix") and copo.get("po_list") and copo.get("co_list"):
-        elements.append(Paragraph("4a. Course Outcome to Program Outcome Correlation Matrix (PO1-PO11, PSO1-PSO3)", h2_style))
+        elements.append(Paragraph("4a. Course Outcome to Program Outcome Correlation Matrix", h2_style))
         matrix = copo.get("matrix", {})
         po_list = copo.get("po_list", [])
         co_list = copo.get("co_list", [])
@@ -483,7 +539,7 @@ def create_pdf_report(report_data: Dict[str, Any], include_charts: bool = True, 
         m_table = Table(m_rows, colWidths=[0.65 * inch] + [col_w] * len(po_list))
         m_table.setStyle(TableStyle([
             ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#0F766E')),
-            ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#CBD5E1')),
+            ('GRID', (0, 0), (-1, -1), 0.3, colors.HexColor('#CBD5E1')),
             ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#F8FAFC')]),
             ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
             ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
@@ -495,7 +551,7 @@ def create_pdf_report(report_data: Dict[str, Any], include_charts: bool = True, 
 
     # Section 4b: PO & PSO Attainment Table
     if copo.get("po_results"):
-        elements.append(Paragraph("4b. Program Outcome (PO & PSO) Attainment Results", h2_style))
+        elements.append(Paragraph("4b. Program Outcome (PO &amp; PSO) Attainment Results", h2_style))
         po_headers = [
             Paragraph("PO / PSO", header_cell),
             Paragraph("Mapping Level Sum", header_cell),
@@ -516,12 +572,12 @@ def create_pdf_report(report_data: Dict[str, Any], include_charts: bool = True, 
         po_table = Table(po_rows, colWidths=[1.3*inch, 1.5*inch, 1.5*inch, 1.5*inch, 1.6*inch])
         po_table.setStyle(TableStyle([
             ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#2563EB')),
-            ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#CBD5E1')),
+            ('GRID', (0, 0), (-1, -1), 0.3, colors.HexColor('#CBD5E1')),
             ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#F8FAFC')]),
             ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
             ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-            ('TOPPADDING', (0, 0), (-1, -1), 2.5),
-            ('BOTTOMPADDING', (0, 0), (-1, -1), 2.5),
+            ('TOPPADDING', (0, 0), (-1, -1), 2),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 2),
         ]))
         elements.append(po_table)
         elements.append(Spacer(1, 8))
@@ -529,7 +585,7 @@ def create_pdf_report(report_data: Dict[str, Any], include_charts: bool = True, 
     # Section 5: All Visual Analytics Profile (Including all 3 graphs from Page 2 + Comparison Graph)
     if include_charts:
         elements.append(PageBreak())
-        elements.append(Paragraph("5. Visual Analytics & Course Outcome Performance Profiles", h2_style))
+        elements.append(Paragraph("5. Visual Analytics &amp; Course Outcome Performance Profiles", h2_style))
         elements.append(Spacer(1, 4))
 
         # Chart 1: Students Passing Each CO
@@ -576,7 +632,8 @@ def create_pdf_report(report_data: Dict[str, Any], include_charts: bool = True, 
     ]))
     elements.append(sig_table)
 
-    doc.build(elements)
+    # Build document with running header & footer on every page
+    doc.build(elements, onFirstPage=draw_page_decorations, onLaterPages=draw_page_decorations)
     buffer.seek(0)
     return buffer
 
@@ -716,15 +773,15 @@ def create_slow_fast_learners_pdf(report_data: Dict[str, Any], learners_data: Di
     f_table = Table(f_rows, colWidths=[0.6*inch, 2.4*inch, 4.5*inch])
     f_table.setStyle(TableStyle([
         ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#166534')),
-        ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#CBD5E1')),
+        ('GRID', (0, 0), (-1, -1), 0.3, colors.HexColor('#CBD5E1')),
         ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#F0FDF4')]),
         ('ALIGN', (0, 0), (0, -1), 'CENTER'),
         ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-        ('TOPPADDING', (0, 0), (-1, -1), 3),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
+        ('TOPPADDING', (0, 0), (-1, -1), 2.5),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 2.5),
     ]))
     elements.append(f_table)
-    elements.append(Spacer(1, 12))
+    elements.append(Spacer(1, 10))
 
     # 6. Table 2: Slow Learners List
     slow_learners = learners_data.get('slow_learners', [])
@@ -748,12 +805,12 @@ def create_slow_fast_learners_pdf(report_data: Dict[str, Any], learners_data: Di
     s_table = Table(s_rows, colWidths=[0.6*inch, 2.4*inch, 4.5*inch])
     s_table.setStyle(TableStyle([
         ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#991B1B')),
-        ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#CBD5E1')),
+        ('GRID', (0, 0), (-1, -1), 0.3, colors.HexColor('#CBD5E1')),
         ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#FEF2F2')]),
         ('ALIGN', (0, 0), (0, -1), 'CENTER'),
         ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-        ('TOPPADDING', (0, 0), (-1, -1), 3),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
+        ('TOPPADDING', (0, 0), (-1, -1), 2.5),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 2.5),
     ]))
     elements.append(s_table)
     elements.append(Spacer(1, 14))
@@ -773,6 +830,6 @@ def create_slow_fast_learners_pdf(report_data: Dict[str, Any], learners_data: Di
     ]))
     elements.append(sig_table)
 
-    doc.build(elements)
+    doc.build(elements, onFirstPage=draw_page_decorations, onLaterPages=draw_page_decorations)
     buffer.seek(0)
     return buffer
