@@ -325,8 +325,8 @@ def api_upload_direct():
         headers = [f"Assessment_{i+1}" for i in range(len(headers))]
 
     # Keyword lists for detection
-    roll_keywords = ['roll', 'seat', 'prn', 'reg', 'serial', 'urn', 'enroll', 'srno', 'rollno', 'student_id']
-    roll_exact = {'sr', 'sr.', 's.no', 's.no.', 'sno', 'no', '#', 'id', 'sr no', 'sr. no', 'roll no', 'roll no.', 'seat no', 'roll_no'}
+    roll_keywords = ['roll', 'seat', 'prn', 'reg', 'serial', 'urn', 'enroll', 'srno', 'rollno', 'student_id', 'ar_no', 'arno', 'ar.no']
+    roll_exact = {'sr', 'sr.', 's.no', 's.no.', 'sno', 'no', '#', 'id', 'sr no', 'sr. no', 'roll no', 'roll no.', 'seat no', 'roll_no', 'ar', 'ar no', 'ar.', 'ar. no', 'ar no.'}
     name_keywords = ['name', 'student', 'candidate']
     exam_keywords = ['test', 'exam', 'cce', 'ut', 'quiz', 'mark', 'score', 'assess', 'insem', 'prelim', 'sem', 'endsem', 'midsem', 'theory', 'practical', 'pr', 'oral', 'tw', 'termwork', 'co']
 

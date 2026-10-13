@@ -661,16 +661,13 @@ function renderLearnersTables(data) {
   if (slowTbody) {
     slowTbody.innerHTML = '';
     if (!data.slow_learners || data.slow_learners.length === 0) {
-      slowTbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted" style="padding: 16px;">No slow learners identified under this criteria.</td></tr>';
+      slowTbody.innerHTML = '<tr><td colspan="2" class="text-center text-muted" style="padding: 16px;">No slow learners identified under this criteria.</td></tr>';
     } else {
       data.slow_learners.forEach(s => {
         const tr = document.createElement('tr');
-        const defCos = s.deficient_cos && s.deficient_cos.length > 0 ? s.deficient_cos.join(', ') : 'Remedial coaching recommended';
         tr.innerHTML = `
           <td class="bold" style="color: #991b1b;">${s.roll_no}</td>
           <td>${s.name}</td>
-          <td class="text-center bold" style="color: #dc2626;">${s.score_pct}%</td>
-          <td><span style="color: #b91c1c; font-size: 11px;">⚠️ ${defCos}</span></td>
         `;
         slowTbody.appendChild(tr);
       });
@@ -682,16 +679,13 @@ function renderLearnersTables(data) {
   if (fastTbody) {
     fastTbody.innerHTML = '';
     if (!data.fast_learners || data.fast_learners.length === 0) {
-      fastTbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted" style="padding: 16px;">No fast learners identified under this criteria.</td></tr>';
+      fastTbody.innerHTML = '<tr><td colspan="2" class="text-center text-muted" style="padding: 16px;">No fast learners identified under this criteria.</td></tr>';
     } else {
       data.fast_learners.forEach(s => {
         const tr = document.createElement('tr');
-        const act = s.advanced_action || 'NPTEL/MOOCs & Peer Tutoring';
         tr.innerHTML = `
           <td class="bold" style="color: #166534;">${s.roll_no}</td>
           <td>${s.name}</td>
-          <td class="text-center bold" style="color: #15803d;">${s.score_pct}%</td>
-          <td><span style="color: #15803d; font-size: 11px;">🌟 ${act}</span></td>
         `;
         fastTbody.appendChild(tr);
       });
@@ -746,29 +740,7 @@ function renderDirectCharts(data) {
     }
   });
 
-  // Chart 3: Student Overall Performance Distribution
-  const ctxDist = document.getElementById('chartStudentPerformance');
-  if (chartInstances['chartStudentPerformance']) chartInstances['chartStudentPerformance'].destroy();
-  const ranges = data.score_ranges;
-  chartInstances['chartStudentPerformance'] = new Chart(ctxDist, {
-    type: 'bar',
-    data: {
-      labels: Object.keys(ranges),
-      datasets: [{
-        label: 'Student Count',
-        data: Object.values(ranges),
-        backgroundColor: ['#059669', '#2563eb', '#f59e0b', '#f97316', '#ef4444'],
-        borderRadius: 4
-      }]
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      scales: {
-        y: { beginAtZero: true, ticks: { precision: 0 } }
-      }
-    }
-  });
+
 
   // Chart 4: Assessment Passing %
   const ctxAss = document.getElementById('chartAssessmentPassRate');
@@ -1088,19 +1060,19 @@ function renderWeightedResults(data) {
         {
           label: `Direct Attainment (${data.direct_weight}%)`,
           data: data.combined_results.map(c => c.direct_attainment),
-          backgroundColor: '#3b82f6',
+          backgroundColor: '#10b981',
           borderRadius: 4
         },
         {
           label: `Indirect Attainment (${data.indirect_weight}%)`,
           data: data.combined_results.map(c => c.indirect_attainment),
-          backgroundColor: '#10b981',
+          backgroundColor: '#f59e0b',
           borderRadius: 4
         },
         {
           label: 'Combined Weighted Attainment',
           data: data.combined_results.map(c => c.combined_attainment),
-          backgroundColor: '#1e293b',
+          backgroundColor: '#dc2626',
           borderRadius: 4
         }
       ]

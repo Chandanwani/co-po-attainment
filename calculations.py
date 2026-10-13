@@ -783,8 +783,13 @@ def categorize_slow_fast_learners(
             record['action_plan'] = 'Regular course assignments and periodic review'
             other_learners.append(record)
 
-    fast_learners.sort(key=lambda x: x['percentage'], reverse=True)
-    slow_learners.sort(key=lambda x: x['percentage'])
+    def roll_sort_key(item):
+        r = str(item.get('roll_no', '')).strip()
+        m = re.search(r'\d+', r)
+        return (int(m.group()) if m else 999999, r)
+
+    fast_learners.sort(key=roll_sort_key)
+    slow_learners.sort(key=roll_sort_key)
 
     return {
         'target_assessment': target_assessment or 'Overall Evaluation',

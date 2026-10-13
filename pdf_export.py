@@ -78,8 +78,9 @@ def build_two_line_teacher_box(teacher: Dict[str, Any], overall_att: str, overal
     ay = teacher.get('academic_year', 'N/A') or 'N/A'
     sem = teacher.get('semester', 'N/A') or 'N/A'
 
-    line1 = f"<b>Faculty Name:</b> {f_name} &nbsp;&nbsp;|&nbsp;&nbsp; <b>Subject:</b> {subj} &nbsp;&nbsp;|&nbsp;&nbsp; <b>Class:</b> {cls_name} ({div_name})"
-    line2 = f"<b>Academic Year:</b> {ay} &nbsp;&nbsp;|&nbsp;&nbsp; <b>Semester:</b> {sem} &nbsp;&nbsp;|&nbsp;&nbsp; <b>Overall Attainment:</b> {overall_att} / 3.00 ({overall_lvl})"
+    cls_div = f"{cls_name} - Div {div_name}" if div_name and div_name != 'N/A' else cls_name
+    line1 = f"<b>Faculty Name:</b> {f_name} &nbsp;&nbsp;|&nbsp;&nbsp; <b>Subject:</b> {subj} &nbsp;&nbsp;|&nbsp;&nbsp; <b>Class:</b> {cls_div}"
+    line2 = f"<b>Academic Year:</b> {ay} &nbsp;&nbsp;|&nbsp;&nbsp; <b>Semester:</b> {sem} &nbsp;&nbsp;|&nbsp;&nbsp; <b>Overall Attainment:</b> {overall_att} / 3.00 &bull; {overall_lvl}"
 
     t_data = [
         [Paragraph(line1, normal_cell)],
@@ -106,7 +107,7 @@ def create_co_passing_drawing(direct: Dict[str, Any]) -> Any:
     passed = [int(c.get('students_passed', 0) or 0) for c in co_summaries][:8]
     total_students = int(direct.get('total_students', 0) or max(passed + [1]))
 
-    d = Drawing(520, 115)
+    d = Drawing(520, 120)
     chart = VerticalBarChart()
     chart.x = 40
     chart.y = 15
@@ -116,9 +117,13 @@ def create_co_passing_drawing(direct: Dict[str, Any]) -> Any:
     chart.categoryAxis.categoryNames = cos
     chart.categoryAxis.labels.fontSize = 8
     chart.valueAxis.valueMin = 0
-    chart.valueAxis.valueMax = max(total_students, max(passed + [1]))
+    chart.valueAxis.valueMax = int(max(total_students, max(passed + [1])) * 1.15)
     chart.valueAxis.labels.fontSize = 7
     chart.bars[0].fillColor = colors.HexColor('#2563EB')
+    chart.barLabelFormat = '%d'
+    chart.barLabels.fontSize = 7.5
+    chart.barLabels.boxAnchor = 's'
+    chart.barLabels.dy = 2
     d.add(chart)
     return d
 
@@ -131,7 +136,7 @@ def create_direct_attainment_drawing(direct: Dict[str, Any]) -> Any:
     cos = [str(c.get('co', '')) for c in co_summaries][:8]
     atts = [float(c.get('attainment', 0) or 0) for c in co_summaries][:8]
 
-    d = Drawing(520, 115)
+    d = Drawing(520, 120)
     chart = VerticalBarChart()
     chart.x = 40
     chart.y = 15
@@ -141,41 +146,20 @@ def create_direct_attainment_drawing(direct: Dict[str, Any]) -> Any:
     chart.categoryAxis.categoryNames = cos
     chart.categoryAxis.labels.fontSize = 8
     chart.valueAxis.valueMin = 0.0
-    chart.valueAxis.valueMax = 3.0
+    chart.valueAxis.valueMax = 3.3
     chart.valueAxis.valueStep = 0.5
     chart.valueAxis.labels.fontSize = 7
     chart.bars[0].fillColor = colors.HexColor('#10B981')
-    d.add(chart)
-    return d
-
-
-def create_score_distribution_drawing(direct: Dict[str, Any]) -> Any:
-    """Graph 3: Student Overall Performance Score Distribution."""
-    ranges = direct.get('score_ranges', {})
-    if not ranges:
-        return None
-    categories = list(ranges.keys())
-    counts = [int(v) for v in ranges.values()]
-
-    d = Drawing(520, 115)
-    chart = VerticalBarChart()
-    chart.x = 40
-    chart.y = 15
-    chart.height = 85
-    chart.width = 460
-    chart.data = [counts]
-    chart.categoryAxis.categoryNames = categories
-    chart.categoryAxis.labels.fontSize = 8
-    chart.valueAxis.valueMin = 0
-    chart.valueAxis.valueMax = max(counts + [1])
-    chart.valueAxis.labels.fontSize = 7
-    chart.bars[0].fillColor = colors.HexColor('#F59E0B')
+    chart.barLabelFormat = '%.2f'
+    chart.barLabels.fontSize = 7.5
+    chart.barLabels.boxAnchor = 's'
+    chart.barLabels.dy = 2
     d.add(chart)
     return d
 
 
 def create_co_barchart_drawing(weighted: Dict[str, Any]) -> Any:
-    """Graph 4: Combined multi-bar comparison (Direct vs Indirect vs Combined Attainment)."""
+    """Graph 3: Combined multi-bar comparison (Direct vs Indirect vs Combined Attainment: Green to Red)."""
     results = weighted.get("combined_results", [])
     if not results:
         return None
@@ -184,7 +168,7 @@ def create_co_barchart_drawing(weighted: Dict[str, Any]) -> Any:
     indirect_data = [float(r.get('indirect_attainment', 0) or 0) for r in results][:8]
     combined_data = [float(r.get('combined_attainment', 0) or 0) for r in results][:8]
 
-    d = Drawing(520, 125)
+    d = Drawing(520, 130)
     chart = VerticalBarChart()
     chart.x = 40
     chart.y = 15
@@ -194,12 +178,16 @@ def create_co_barchart_drawing(weighted: Dict[str, Any]) -> Any:
     chart.categoryAxis.categoryNames = cos
     chart.categoryAxis.labels.fontSize = 8
     chart.valueAxis.valueMin = 0.0
-    chart.valueAxis.valueMax = 3.0
+    chart.valueAxis.valueMax = 3.4
     chart.valueAxis.valueStep = 0.5
     chart.valueAxis.labels.fontSize = 7
-    chart.bars[0].fillColor = colors.HexColor('#3B82F6')
-    chart.bars[1].fillColor = colors.HexColor('#10B981')
-    chart.bars[2].fillColor = colors.HexColor('#1E293B')
+    chart.bars[0].fillColor = colors.HexColor('#10B981')  # Green (Direct)
+    chart.bars[1].fillColor = colors.HexColor('#F59E0B')  # Amber (Indirect)
+    chart.bars[2].fillColor = colors.HexColor('#DC2626')  # Red (Combined)
+    chart.barLabelFormat = '%.2f'
+    chart.barLabels.fontSize = 6.5
+    chart.barLabels.boxAnchor = 's'
+    chart.barLabels.dy = 2
     d.add(chart)
     return d
 
@@ -492,28 +480,21 @@ def create_pdf_report(report_data: Dict[str, Any], include_charts: bool = True, 
         if c1:
             elements.append(Paragraph("<b>Graph 1: Students Passing Each Course Outcome (&ge;50% Marks)</b>", bold_cell))
             elements.append(c1)
-            elements.append(Spacer(1, 8))
+            elements.append(Spacer(1, 10))
 
         # Chart 2: Direct CO Attainment
         c2 = create_direct_attainment_drawing(direct)
         if c2:
             elements.append(Paragraph("<b>Graph 2: Direct Course Outcome Attainment Scores (0-3 Points Scale)</b>", bold_cell))
             elements.append(c2)
-            elements.append(Spacer(1, 8))
+            elements.append(Spacer(1, 10))
 
-        # Chart 3: Score Distribution
-        c3 = create_score_distribution_drawing(direct)
-        if c3:
-            elements.append(Paragraph("<b>Graph 3: Student Overall Performance Score Distribution</b>", bold_cell))
-            elements.append(c3)
-            elements.append(Spacer(1, 8))
-
-        # Chart 4: Direct vs Indirect vs Combined Comparison
+        # Chart 3: Direct vs Indirect vs Combined Comparison (Green to Red)
         c4 = create_co_barchart_drawing(weighted)
         if c4:
-            elements.append(Paragraph("<b>Graph 4: Attainment Comparison Profile (Blue: Direct | Green: Indirect | Slate: Combined)</b>", bold_cell))
+            elements.append(Paragraph("<b>Graph 3: Course Outcome Attainment Comparison (Green: Direct | Amber: Indirect | Red: Combined)</b>", bold_cell))
             elements.append(c4)
-            elements.append(Spacer(1, 8))
+            elements.append(Spacer(1, 10))
 
     # Faculty & Authority Signatures block
     elements.append(Spacer(1, 14))
@@ -634,8 +615,8 @@ def create_slow_fast_learners_pdf(report_data: Dict[str, Any], learners_data: Di
         f"<b>Fast Learner Threshold:</b> &ge; {fast_th}% &nbsp;&nbsp;|&nbsp;&nbsp; "
         f"<b>Slow Learner Threshold:</b> &lt; {slow_th}%<br/>"
         f"<b>Total Evaluated:</b> {tot_eval} &nbsp;&nbsp;|&nbsp;&nbsp; "
-        f"<b>Identified Fast Learners:</b> {fast_cnt} ({fast_pct}%) &nbsp;&nbsp;|&nbsp;&nbsp; "
-        f"<b>Identified Slow Learners:</b> {slow_cnt} ({slow_pct}%)"
+        f"<b>Identified Fast Learners:</b> {fast_cnt} &bull; {fast_pct}% &nbsp;&nbsp;|&nbsp;&nbsp; "
+        f"<b>Identified Slow Learners:</b> {slow_cnt} &bull; {slow_pct}%"
     )
     criteria_table = Table([[Paragraph(criteria_html, normal_cell)]], colWidths=[540])
     criteria_table.setStyle(TableStyle([
@@ -656,40 +637,30 @@ def create_slow_fast_learners_pdf(report_data: Dict[str, Any], learners_data: Di
         Paragraph("Sr.", header_cell),
         Paragraph("Roll No", header_cell),
         Paragraph("Student Name", header_cell),
-        Paragraph("Score / Max", header_cell),
-        Paragraph("Percentage", header_cell),
-        Paragraph("Passed COs", header_cell),
-        Paragraph("Advanced Learning Action Plan", header_cell),
     ]
     f_rows = [f_headers]
     if fast_learners:
         for idx, fl in enumerate(fast_learners, start=1):
-            passed_str = ", ".join(fl.get('passed_cos', [])) or "All"
             f_rows.append([
                 Paragraph(str(idx), normal_cell),
                 Paragraph(str(fl.get('roll_no')), bold_cell),
                 Paragraph(str(fl.get('name')), normal_cell),
-                Paragraph(str(fl.get('score_display')), normal_cell),
-                Paragraph(f"{fl.get('percentage')}%", bold_cell),
-                Paragraph(passed_str, normal_cell),
-                Paragraph(str(fl.get('action_plan')), normal_cell),
             ])
     else:
-        f_rows.append([Paragraph("No students met the Fast Learner criteria.", normal_cell)] + [Paragraph("", normal_cell)] * 6)
+        f_rows.append([Paragraph("No students met the Fast Learner criteria.", normal_cell), Paragraph("-", normal_cell), Paragraph("-", normal_cell)])
 
-    f_table = Table(f_rows, colWidths=[0.35*inch, 0.75*inch, 1.4*inch, 0.85*inch, 0.75*inch, 1.05*inch, 2.35*inch])
+    f_table = Table(f_rows, colWidths=[0.6*inch, 2.4*inch, 4.5*inch])
     f_table.setStyle(TableStyle([
         ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#166534')),
         ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#CBD5E1')),
         ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#F0FDF4')]),
         ('ALIGN', (0, 0), (0, -1), 'CENTER'),
-        ('ALIGN', (3, 0), (4, -1), 'CENTER'),
         ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-        ('TOPPADDING', (0, 0), (-1, -1), 2.5),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 2.5),
+        ('TOPPADDING', (0, 0), (-1, -1), 3),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
     ]))
     elements.append(f_table)
-    elements.append(Spacer(1, 10))
+    elements.append(Spacer(1, 12))
 
     # 6. Table 2: Slow Learners List
     slow_learners = learners_data.get('slow_learners', [])
@@ -698,37 +669,27 @@ def create_slow_fast_learners_pdf(report_data: Dict[str, Any], learners_data: Di
         Paragraph("Sr.", header_cell),
         Paragraph("Roll No", header_cell),
         Paragraph("Student Name", header_cell),
-        Paragraph("Score / Max", header_cell),
-        Paragraph("Percentage", header_cell),
-        Paragraph("Deficient COs", header_cell),
-        Paragraph("Remedial Action Plan", header_cell),
     ]
     s_rows = [s_headers]
     if slow_learners:
         for idx, sl in enumerate(slow_learners, start=1):
-            def_str = ", ".join(sl.get('deficient_cos', [])) or "Basic Practice"
             s_rows.append([
                 Paragraph(str(idx), normal_cell),
                 Paragraph(str(sl.get('roll_no')), bold_cell),
                 Paragraph(str(sl.get('name')), normal_cell),
-                Paragraph(str(sl.get('score_display')), normal_cell),
-                Paragraph(f"{sl.get('percentage')}%", bold_cell),
-                Paragraph(def_str, normal_cell),
-                Paragraph(str(sl.get('action_plan')), normal_cell),
             ])
     else:
-        s_rows.append([Paragraph("No students met the Slow Learner criteria.", normal_cell)] + [Paragraph("", normal_cell)] * 6)
+        s_rows.append([Paragraph("No students met the Slow Learner criteria.", normal_cell), Paragraph("-", normal_cell), Paragraph("-", normal_cell)])
 
-    s_table = Table(s_rows, colWidths=[0.35*inch, 0.75*inch, 1.4*inch, 0.85*inch, 0.75*inch, 1.05*inch, 2.35*inch])
+    s_table = Table(s_rows, colWidths=[0.6*inch, 2.4*inch, 4.5*inch])
     s_table.setStyle(TableStyle([
         ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#991B1B')),
         ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#CBD5E1')),
         ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#FEF2F2')]),
         ('ALIGN', (0, 0), (0, -1), 'CENTER'),
-        ('ALIGN', (3, 0), (4, -1), 'CENTER'),
         ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-        ('TOPPADDING', (0, 0), (-1, -1), 2.5),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 2.5),
+        ('TOPPADDING', (0, 0), (-1, -1), 3),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
     ]))
     elements.append(s_table)
     elements.append(Spacer(1, 14))
