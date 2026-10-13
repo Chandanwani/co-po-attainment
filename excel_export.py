@@ -87,13 +87,36 @@ def create_complete_excel_report(report_data: Dict[str, Any]) -> io.BytesIO:
     ws_info.title = "Course & Faculty Info"
     ws_info.views.sheetView[0].showGridLines = True
 
-    ws_info["A1"] = "CO-PO ATTAINMENT EVALUATION REPORT"
-    ws_info["A1"].font = TITLE_FONT
-    ws_info.merge_cells("A1:D1")
-    ws_info["A1"].alignment = Alignment(horizontal="left", vertical="center")
+    ws_info["A1"] = "D. Y. PATIL PRATISHTHAN'S D. Y. PATIL COLLEGE OF ENGINEERING, AKURDI, PUNE - 411044"
+    ws_info["A1"].font = Font(name="Calibri", size=13, bold=True, color="1E3A8A")
+    ws_info["A2"] = "Approved by AICTE, Recognized by DTE, Affiliated to SPPU, Accredited by NAAC with 'A' Grade, NBA Accredited, Autonomous AY 2024-25"
+    ws_info["A2"].font = Font(name="Calibri", size=9, italic=True, color="475569")
 
-    ws_info["A3"] = "Teacher & Academic Course Metadata"
-    ws_info["A3"].font = SECTION_FONT
+    ws_info["A4"] = "CO-PO ATTAINMENT EVALUATION REPORT"
+    ws_info["A4"].font = TITLE_FONT
+    ws_info.merge_cells("A4:D4")
+    ws_info["A4"].alignment = Alignment(horizontal="left", vertical="center")
+
+    ws_info["A6"] = "Teacher & Academic Course Metadata"
+    ws_info["A6"].font = SECTION_FONT
+
+    # Calculate fallback overall attainment if weighted is not explicitly run
+    d_summaries = direct.get('co_summaries', [])
+    fallback_att = "N/A"
+    fallback_lvl = "N/A"
+    if d_summaries:
+        valid_atts = [float(c.get('attainment', 0) or 0) for c in d_summaries if c.get('attainment') is not None]
+        if valid_atts:
+            avg_a = sum(valid_atts) / len(valid_atts)
+            fallback_att = f"{avg_a:.2f}"
+            fallback_lvl = "Level 3" if avg_a >= 2.5 else ("Level 2" if avg_a >= 1.5 else "Level 1")
+
+    cur_overall_att = weighted.get('overall_attainment')
+    if cur_overall_att is None or cur_overall_att == '':
+        cur_overall_att = fallback_att
+    cur_overall_lvl = weighted.get('overall_level_label')
+    if not cur_overall_lvl or cur_overall_lvl == 'N/A':
+        cur_overall_lvl = fallback_lvl
 
     meta_rows = [
         ("Faculty Name", teacher.get("faculty_name", "N/A")),
@@ -104,11 +127,11 @@ def create_complete_excel_report(report_data: Dict[str, Any]) -> io.BytesIO:
         ("Academic Year", teacher.get("academic_year", "N/A")),
         ("Direct Assessment Weight", f"{weighted.get('direct_weight', 80)}%"),
         ("Indirect Assessment Weight", f"{weighted.get('indirect_weight', 20)}%"),
-        ("Overall Course Attainment", f"{weighted.get('overall_attainment', 'N/A')} / 3.00"),
-        ("Overall Attainment Level", weighted.get('overall_level_label', 'N/A')),
+        ("Overall Course Attainment", f"{cur_overall_att} / 3.00"),
+        ("Overall Attainment Level", cur_overall_lvl),
     ]
 
-    r_idx = 4
+    r_idx = 7
     for label, val in meta_rows:
         ws_info.cell(row=r_idx, column=1, value=label).font = BOLD_FONT
         ws_info.cell(row=r_idx, column=1).fill = LIGHT_ACCENT_FILL
@@ -451,8 +474,13 @@ def create_direct_only_excel(direct_data: Dict[str, Any], teacher: Dict[str, Any
     ws_sum.title = "Direct CO Attainment"
     ws_sum.views.sheetView[0].showGridLines = True
 
-    ws_sum["A1"] = f"Direct Assessment Report - {teacher.get('subject', 'Subject')}"
-    ws_sum["A1"].font = TITLE_FONT
+    ws_sum["A1"] = "D. Y. PATIL PRATISHTHAN'S D. Y. PATIL COLLEGE OF ENGINEERING, AKURDI, PUNE - 411044"
+    ws_sum["A1"].font = Font(name="Calibri", size=13, bold=True, color="1E3A8A")
+    ws_sum["A2"] = "Approved by AICTE, Recognized by DTE, Affiliated to SPPU, Accredited by NAAC with 'A' Grade, NBA Accredited, Autonomous AY 2024-25"
+    ws_sum["A2"].font = Font(name="Calibri", size=9, italic=True, color="475569")
+
+    ws_sum["A4"] = f"Direct Assessment Report - {teacher.get('subject', 'Subject')}"
+    ws_sum["A4"].font = TITLE_FONT
 
     headers = [
         "Course Outcome", "Mapped Assessments", "Max Marks", "Appeared", "Passed", "Pass %",
@@ -460,10 +488,10 @@ def create_direct_only_excel(direct_data: Dict[str, Any], teacher: Dict[str, Any
         "Direct Attainment (Points)", "Attainment Level"
     ]
     for c_idx, h in enumerate(headers, start=1):
-        ws_sum.cell(row=3, column=c_idx, value=h)
-    style_header_row(ws_sum, 3, len(headers))
+        ws_sum.cell(row=6, column=c_idx, value=h)
+    style_header_row(ws_sum, 6, len(headers))
 
-    r_idx = 4
+    r_idx = 7
     for c in direct_data.get("co_summaries", []):
         int_att = c.get("internal_attainment", "-") if c.get("has_internal") else "N/A"
         ese_att = c.get("ese_attainment", "-") if c.get("has_ese") else "N/A"
@@ -521,15 +549,20 @@ def create_indirect_only_excel(indirect_data: Dict[str, Any], teacher: Dict[str,
     ws.title = "Indirect CO Attainment"
     ws.views.sheetView[0].showGridLines = True
 
-    ws["A1"] = f"Indirect Survey Report - {teacher.get('subject', 'Subject')}"
-    ws["A1"].font = TITLE_FONT
+    ws["A1"] = "D. Y. PATIL PRATISHTHAN'S D. Y. PATIL COLLEGE OF ENGINEERING, AKURDI, PUNE - 411044"
+    ws["A1"].font = Font(name="Calibri", size=13, bold=True, color="1E3A8A")
+    ws["A2"] = "Approved by AICTE, Recognized by DTE, Affiliated to SPPU, Accredited by NAAC with 'A' Grade, NBA Accredited, Autonomous AY 2024-25"
+    ws["A2"].font = Font(name="Calibri", size=9, italic=True, color="475569")
+
+    ws["A4"] = f"Indirect Survey Report - {teacher.get('subject', 'Subject')}"
+    ws["A4"].font = TITLE_FONT
 
     headers = ["Course Outcome", "Responses", "Max Scale", "Average Rating", "Rating %", "Attainment", "Level"]
     for c_idx, h in enumerate(headers, start=1):
-        ws.cell(row=3, column=c_idx, value=h)
-    style_header_row(ws, 3, len(headers))
+        ws.cell(row=6, column=c_idx, value=h)
+    style_header_row(ws, 6, len(headers))
 
-    r_idx = 4
+    r_idx = 7
     for c in indirect_data.get("co_summaries", []):
         row_vals = [
             c.get("co"), c.get("response_count"), c.get("max_rating"),
@@ -558,15 +591,20 @@ def create_copo_only_excel(copo_data: Dict[str, Any], teacher: Dict[str, Any]) -
     ws_po.title = "PO Attainment"
     ws_po.views.sheetView[0].showGridLines = True
 
-    ws_po["A1"] = f"Program Outcome Attainment - {teacher.get('subject', 'Subject')}"
-    ws_po["A1"].font = TITLE_FONT
+    ws_po["A1"] = "D. Y. PATIL PRATISHTHAN'S D. Y. PATIL COLLEGE OF ENGINEERING, AKURDI, PUNE - 411044"
+    ws_po["A1"].font = Font(name="Calibri", size=13, bold=True, color="1E3A8A")
+    ws_po["A2"] = "Approved by AICTE, Recognized by DTE, Affiliated to SPPU, Accredited by NAAC with 'A' Grade, NBA Accredited, Autonomous AY 2024-25"
+    ws_po["A2"].font = Font(name="Calibri", size=9, italic=True, color="475569")
+
+    ws_po["A4"] = f"Program Outcome Attainment - {teacher.get('subject', 'Subject')}"
+    ws_po["A4"].font = TITLE_FONT
 
     headers = ["Program Outcome", "Mapping Level Sum", "Weighted CO Sum", "PO Attainment", "Attainment Level"]
     for c_idx, h in enumerate(headers, start=1):
-        ws_po.cell(row=3, column=c_idx, value=h)
-    style_header_row(ws_po, 3, len(headers))
+        ws_po.cell(row=6, column=c_idx, value=h)
+    style_header_row(ws_po, 6, len(headers))
 
-    r_idx = 4
+    r_idx = 7
     for p in copo_data.get("po_results", []):
         att = p.get("attainment")
         att_disp = att if att is not None else "N/A"

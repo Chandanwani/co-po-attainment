@@ -192,6 +192,36 @@ def create_co_barchart_drawing(weighted: Dict[str, Any]) -> Any:
     return d
 
 
+def create_po_barchart_drawing(copo: Dict[str, Any]) -> Any:
+    """Graph 4: Program Outcome (PO & PSO) Attainment Values (0-3 Points Scale)."""
+    po_results = copo.get("po_results", [])
+    if not po_results:
+        return None
+    labels = [str(p.get('po', '')) for p in po_results]
+    data_vals = [float(p.get('attainment', 0) or 0) if p.get('attainment') is not None else 0.0 for p in po_results]
+
+    d = Drawing(520, 120)
+    chart = VerticalBarChart()
+    chart.x = 40
+    chart.y = 15
+    chart.height = 85
+    chart.width = 460
+    chart.data = [data_vals]
+    chart.categoryAxis.categoryNames = labels
+    chart.categoryAxis.labels.fontSize = 7
+    chart.valueAxis.valueMin = 0.0
+    chart.valueAxis.valueMax = 3.3
+    chart.valueAxis.valueStep = 0.5
+    chart.valueAxis.labels.fontSize = 7
+    chart.bars[0].fillColor = colors.HexColor('#2563EB')
+    chart.barLabelFormat = '%.2f'
+    chart.barLabels.fontSize = 6.5
+    chart.barLabels.boxAnchor = 's'
+    chart.barLabels.dy = 2
+    d.add(chart)
+    return d
+
+
 def create_pdf_report(report_data: Dict[str, Any], include_charts: bool = True, section: str = "all") -> io.BytesIO:
     """
     Builds the accreditation-ready final PDF report.
@@ -266,6 +296,33 @@ def create_pdf_report(report_data: Dict[str, Any], include_charts: bool = True, 
     indirect = (report_data.get('indirect') or {}).get('data') or {}
     weighted = (report_data.get('weighted') or {}).get('data') or {}
     copo = report_data.get('copo') or {}
+
+    # Fallback if weighted is not computed yet: fallback to direct COs
+    if not weighted.get("combined_results") and direct.get("co_summaries"):
+        d_summaries = direct.get("co_summaries", [])
+        valid_atts = [float(c.get('attainment', 0) or 0) for c in d_summaries if c.get('attainment') is not None]
+        avg_a = (sum(valid_atts) / len(valid_atts)) if valid_atts else 0.0
+        lvl_a = "Level 3 - High" if avg_a >= 2.5 else ("Level 2 - Moderate" if avg_a >= 1.5 else "Level 1 - Low")
+        weighted = {
+            'overall_attainment': f"{avg_a:.2f}",
+            'overall_level_label': lvl_a,
+            'direct_weight': 80,
+            'indirect_weight': 20,
+            'combined_results': [
+                {
+                    'co': c.get('co'),
+                    'direct_pct': c.get('pass_percentage', 0),
+                    'direct_contribution': round(float(c.get('pass_percentage', 0) or 0) * 0.8, 1),
+                    'direct_attainment': c.get('attainment', 0),
+                    'indirect_pct': 0,
+                    'indirect_contribution': 0.0,
+                    'indirect_attainment': 0.0,
+                    'combined_pct': c.get('pass_percentage', 0),
+                    'combined_attainment': c.get('attainment', 0),
+                    'level_label': c.get('level_label', 'Level 0')
+                } for c in d_summaries
+            ]
+        }
 
     # 1. Institution Header
     elements.extend(build_institution_header(styles))
@@ -494,6 +551,13 @@ def create_pdf_report(report_data: Dict[str, Any], include_charts: bool = True, 
         if c4:
             elements.append(Paragraph("<b>Graph 3: Course Outcome Attainment Comparison (Green: Direct | Amber: Indirect | Red: Combined)</b>", bold_cell))
             elements.append(c4)
+            elements.append(Spacer(1, 10))
+
+        # Chart 4: PO & PSO Attainment Profile
+        c5 = create_po_barchart_drawing(copo)
+        if c5:
+            elements.append(Paragraph("<b>Graph 4: Program Outcome (PO &amp; PSO) Attainment Profile (0-3 Points Scale)</b>", bold_cell))
+            elements.append(c5)
             elements.append(Spacer(1, 10))
 
     # Faculty & Authority Signatures block

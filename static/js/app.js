@@ -932,6 +932,9 @@ async function calculateIndirectAttainment() {
     }
 
     renderIndirectResults(result.data);
+    if (typeof saveStoredState === 'function') {
+      saveStoredState({ indirect: result.data });
+    }
     document.getElementById('indirectResultsSection').style.display = 'block';
 
     // Calculate weighted attainment
@@ -1019,6 +1022,9 @@ async function calculateWeightedAttainment() {
     if (!result.success) return;
 
     renderWeightedResults(result.data);
+    if (typeof saveStoredState === 'function') {
+      saveStoredState({ weighted: result.data });
+    }
     document.getElementById('weightedSection').style.display = 'block';
   } catch (err) {
     console.error('Weighted calculation error:', err);

@@ -22,10 +22,21 @@ function getBadgeHtml(levelStr) {
 async function loadFinalReportData() {
   try {
     const res = await fetch('/api/get-full-state');
-    const state = await res.json();
+    let state = await res.json();
+    
+    // Check if state is empty, restore from localStorage if available
+    const stored = (typeof getStoredState === 'function') ? getStoredState() : {};
+    if ((!state.direct || !state.direct.co_summaries) && stored.direct) {
+      state = { ...stored, ...state, direct: stored.direct, weighted: stored.weighted, copo: stored.copo };
+    }
+    
     renderReport(state);
   } catch (err) {
     console.error('Failed to load report data:', err);
+    if (typeof getStoredState === 'function') {
+      const stored = getStoredState();
+      if (stored) renderReport(stored);
+    }
   }
 }
 
@@ -33,15 +44,44 @@ function renderReport(state) {
   const teacher = state.teacher || {};
   const direct = state.direct || {};
   const indirect = state.indirect || {};
-  const weighted = state.weighted || {};
+  let weighted = state.weighted || {};
   const copo = state.copo || {};
 
+  // If weighted attainment not yet computed, fallback to direct average
+  if ((weighted.overall_attainment === undefined || weighted.overall_attainment === null) && direct.co_summaries && direct.co_summaries.length > 0) {
+    const validAtts = direct.co_summaries.map(c => parseFloat(c.attainment) || 0);
+    const avgAtt = validAtts.length > 0 ? (validAtts.reduce((a, b) => a + b, 0) / validAtts.length).toFixed(2) : "0.00";
+    const lvlLabel = parseFloat(avgAtt) >= 2.5 ? "Level 3 - High" : (parseFloat(avgAtt) >= 1.5 ? "Level 2 - Moderate" : "Level 1 - Low");
+    weighted = {
+      ...weighted,
+      overall_attainment: avgAtt,
+      overall_level_label: lvlLabel,
+      direct_weight: weighted.direct_weight || 80,
+      indirect_weight: weighted.indirect_weight || 20,
+      combined_results: (weighted.combined_results && weighted.combined_results.length > 0) ? weighted.combined_results : direct.co_summaries.map(c => ({
+        co: c.co,
+        direct_pct: c.pass_percentage,
+        direct_contribution: (c.pass_percentage * 0.8).toFixed(1),
+        direct_attainment: c.attainment,
+        indirect_pct: 0,
+        indirect_contribution: "0.0",
+        indirect_attainment: 0,
+        combined_pct: c.pass_percentage,
+        combined_attainment: c.attainment,
+        level_label: c.level_label
+      }))
+    };
+  }
+
   // Header display
-  if (weighted.overall_attainment !== undefined) {
+  if (weighted.overall_attainment !== undefined && weighted.overall_attainment !== null) {
     document.getElementById('repOverallAtt').textContent =
       `${weighted.overall_attainment} / 3.00 (${weighted.overall_level_label || 'Attained'})`;
     document.getElementById('repWeightDisp').textContent =
-      `${weighted.direct_weight}% Direct / ${weighted.indirect_weight}% Indirect`;
+      `${weighted.direct_weight || 80}% Direct / ${weighted.indirect_weight || 20}% Indirect`;
+  } else if (copo.overall_po_attainment !== undefined && copo.overall_po_attainment !== null) {
+    document.getElementById('repOverallAtt').textContent =
+      `${copo.overall_po_attainment} / 3.00 (${copo.overall_po_level || 'Attained'})`;
   }
 
   // 1. Weighted CO Attainment Table
@@ -117,69 +157,102 @@ function renderReport(state) {
   // 5. PO Charts
   renderPOCharts(copo.po_results || []);
 
-  // 6. Assessment Summaries Table
-  const tbodyAss = document.getElementById('repAssessmentTable').querySelector('tbody');
-  tbodyAss.innerHTML = '';
-  (direct.assessment_summaries || []).forEach(a => {
-    const tr = document.createElement('tr');
-    tr.innerHTML = `
-      <td class="bold">${a.name}</td>
-      <td>${a.mapped_cos}</td>
-      <td class="text-center">${a.max_marks}</td>
-      <td class="text-center">${a.passing_mark}</td>
-      <td class="text-center">${a.appeared}</td>
-      <td class="text-center">${a.passed}</td>
-      <td class="text-center">${a.failed}</td>
-      <td class="text-center bold">${a.pass_pct}%</td>
-      <td class="text-center">${a.avg_marks}</td>
-      <td class="text-center">${a.min_marks}</td>
-      <td class="text-center">${a.max_marks_scored}</td>
-    `;
-    tbodyAss.appendChild(tr);
-  });
+  // 6. Assessment Summaries Table (if present)
+  const repAssEl = document.getElementById('repAssessmentTable');
+  if (repAssEl) {
+    const tbodyAss = repAssEl.querySelector('tbody');
+    if (tbodyAss) {
+      tbodyAss.innerHTML = '';
+      (direct.assessment_summaries || []).forEach(a => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td class="bold">${a.name}</td>
+          <td>${a.mapped_cos}</td>
+          <td class="text-center">${a.max_marks}</td>
+          <td class="text-center">${a.passing_mark}</td>
+          <td class="text-center">${a.appeared}</td>
+          <td class="text-center">${a.passed}</td>
+          <td class="text-center">${a.failed}</td>
+          <td class="text-center bold">${a.pass_pct}%</td>
+          <td class="text-center">${a.avg_marks}</td>
+          <td class="text-center">${a.min_marks}</td>
+          <td class="text-center">${a.max_marks_scored}</td>
+        `;
+        tbodyAss.appendChild(tr);
+      });
+    }
+  }
 
-  // 7. Student Performance Table & Distribution Charts
-  const tbodyStd = document.getElementById('repStudentTable').querySelector('tbody');
-  tbodyStd.innerHTML = '';
-  (direct.students || []).forEach(s => {
-    const tr = document.createElement('tr');
-    tr.innerHTML = `
-      <td class="bold">${s.roll_no}</td>
-      <td>${s.name}</td>
-      <td class="text-center">${s.total_obtained}</td>
-      <td class="text-center">${s.total_max}</td>
-      <td class="text-center bold">${s.percentage}%</td>
-      <td class="text-center">${s.passed_cos.length}</td>
-      <td>${s.passed_cos.join(', ') || '<span style="color:#ef4444;">None</span>'}</td>
-      <td class="text-center">${s.passed_all ? '<span class="badge badge-level-3">Yes</span>' : '<span class="badge badge-level-0">No</span>'}</td>
-    `;
-    tbodyStd.appendChild(tr);
-  });
+  // 7. Student Performance Table
+  const repStdEl = document.getElementById('repStudentTable');
+  if (repStdEl) {
+    const tbodyStd = repStdEl.querySelector('tbody');
+    if (tbodyStd) {
+      tbodyStd.innerHTML = '';
+      (direct.students || []).forEach(s => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td class="bold">${s.roll_no}</td>
+          <td>${s.name}</td>
+          <td class="text-center">${s.total_obtained}</td>
+          <td class="text-center">${s.total_max}</td>
+          <td class="text-center bold">${s.percentage}%</td>
+          <td class="text-center">${s.passed_cos ? s.passed_cos.length : 0}</td>
+          <td>${s.passed_cos && s.passed_cos.length ? s.passed_cos.join(', ') : '<span style="color:#ef4444;">None</span>'}</td>
+          <td class="text-center">${s.passed_all ? '<span class="badge badge-level-3">Yes</span>' : '<span class="badge badge-level-0">No</span>'}</td>
+        `;
+        tbodyStd.appendChild(tr);
+      });
+    }
+  }
 
-  renderStudentCharts(direct);
+  if (document.getElementById('repChartStudentDist')) {
+    renderStudentCharts(direct);
+  }
 
-  // 8. Indirect Survey Summary Table
-  const tbodyInd = document.getElementById('repIndirectTable').querySelector('tbody');
-  tbodyInd.innerHTML = '';
-  (indirect.co_summaries || []).forEach(c => {
-    const tr = document.createElement('tr');
-    tr.innerHTML = `
-      <td class="bold">${c.co}</td>
-      <td class="text-center">${c.response_count}</td>
-      <td class="text-center">${c.max_rating}</td>
-      <td class="text-center bold">${c.average_rating}</td>
-      <td class="text-center bold">${c.rating_percentage}%</td>
-      <td class="text-center bold" style="color:var(--accent); font-size:14px;">${c.attainment}</td>
-      <td class="text-center">${getBadgeHtml(c.level_label)}</td>
-    `;
-    tbodyInd.appendChild(tr);
-  });
+  // 8. Indirect Survey Summary Table (if present)
+  const repIndEl = document.getElementById('repIndirectTable');
+  if (repIndEl) {
+    const tbodyInd = repIndEl.querySelector('tbody');
+    if (tbodyInd) {
+      tbodyInd.innerHTML = '';
+      (indirect.co_summaries || []).forEach(c => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td class="bold">${c.co}</td>
+          <td class="text-center">${c.response_count}</td>
+          <td class="text-center">${c.max_rating}</td>
+          <td class="text-center bold">${c.average_rating}</td>
+          <td class="text-center bold">${c.rating_percentage}%</td>
+          <td class="text-center bold" style="color:var(--accent); font-size:14px;">${c.attainment}</td>
+          <td class="text-center">${getBadgeHtml(c.level_label)}</td>
+        `;
+        tbodyInd.appendChild(tr);
+      });
+    }
+  }
+}
+
+async function resetEntireSession() {
+  if (!confirm('Are you sure you want to reset the current session and start fresh? All entered data and calculations will be cleared.')) {
+    return;
+  }
+  try {
+    if (typeof localStorage !== 'undefined') {
+      localStorage.removeItem('copo_attainment_state');
+    }
+    await fetch('/api/reset-session', { method: 'POST' });
+    window.location.href = '/?new=1';
+  } catch (err) {
+    console.warn('Reset session error:', err);
+    window.location.href = '/?new=1';
+  }
 }
 
 function renderCOCharts(weighted, direct) {
   const cos = (weighted.combined_results || []).map(c => c.co);
 
-  // Chart 1: Comparison
+  // Chart 1: Comparison (Direct: Green, Indirect: Amber, Combined: Red)
   const ctxCO = document.getElementById('repChartCO');
   if (repCharts['co']) repCharts['co'].destroy();
   repCharts['co'] = new Chart(ctxCO, {
@@ -190,19 +263,19 @@ function renderCOCharts(weighted, direct) {
         {
           label: 'Direct Attainment',
           data: (weighted.combined_results || []).map(c => c.direct_attainment),
-          backgroundColor: '#3b82f6',
+          backgroundColor: '#10b981',
           borderRadius: 4
         },
         {
           label: 'Indirect Attainment',
           data: (weighted.combined_results || []).map(c => c.indirect_attainment),
-          backgroundColor: '#10b981',
+          backgroundColor: '#f59e0b',
           borderRadius: 4
         },
         {
           label: 'Combined Attainment',
           data: (weighted.combined_results || []).map(c => c.combined_attainment),
-          backgroundColor: '#1e293b',
+          backgroundColor: '#dc2626',
           borderRadius: 4
         }
       ]

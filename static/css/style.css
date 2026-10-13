@@ -496,19 +496,36 @@ textarea.form-control {
 
 .chart-canvas-wrapper {
   position: relative;
-  height: 230px;
+  height: 250px;
   width: 100%;
-  overflow: hidden;
+  overflow: visible;
+  padding-bottom: 6px;
 }
 
 /* Charts container fallback */
 .chart-box {
   border: 1px solid var(--border-color);
   border-radius: var(--radius);
-  padding: 16px;
+  padding: 16px 18px 20px 18px;
   background: #ffffff;
-  margin-bottom: 20px;
+  margin-bottom: 24px;
   position: relative;
+  display: flex;
+  flex-direction: column;
+  min-height: 280px;
+  box-sizing: border-box;
+}
+
+.chart-box h4 {
+  margin-bottom: 12px;
+  flex-shrink: 0;
+}
+
+.chart-box canvas {
+  flex-grow: 1;
+  width: 100% !important;
+  height: 230px !important;
+  max-height: 240px;
 }
 
 /* Utility */

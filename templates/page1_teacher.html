@@ -124,6 +124,35 @@
 
 {% block scripts %}
 <script>
+// Check if starting fresh
+const urlParams = new URLSearchParams(window.location.search);
+if (urlParams.get('new') === '1') {
+  if (typeof localStorage !== 'undefined') {
+    localStorage.removeItem('copo_attainment_state');
+  }
+}
+
+// Pre-fill from localStorage if values are not already rendered by server
+window.addEventListener('DOMContentLoaded', () => {
+  if (urlParams.get('new') === '1') return;
+  const stored = (typeof getStoredState === 'function') ? getStoredState() : {};
+  if (stored && stored.teacher) {
+    const t = stored.teacher;
+    const fnInp = document.getElementById('faculty_name');
+    if (fnInp && !fnInp.value && t.faculty_name) fnInp.value = t.faculty_name;
+    const subInp = document.getElementById('subject');
+    if (subInp && !subInp.value && t.subject) subInp.value = t.subject;
+    const clsInp = document.getElementById('class_name');
+    if (clsInp && !clsInp.value && t.class_name) clsInp.value = t.class_name;
+    const divInp = document.getElementById('division');
+    if (divInp && !divInp.value && t.division) divInp.value = t.division;
+    const semInp = document.getElementById('semester');
+    if (semInp && !semInp.value && t.semester) semInp.value = t.semester;
+    const ayInp = document.getElementById('academic_year');
+    if (ayInp && !ayInp.value && t.academic_year) ayInp.value = t.academic_year;
+  }
+});
+
 async function handleTeacherSubmit(e) {
   e.preventDefault();
   const alertEl = document.getElementById('error-alert');
@@ -147,6 +176,11 @@ async function handleTeacherSubmit(e) {
     semester: document.getElementById('semester').value.trim(),
     academic_year: document.getElementById('academic_year').value.trim()
   };
+
+  // Persist to local storage immediately
+  if (typeof saveStoredState === 'function') {
+    saveStoredState({ teacher: payload });
+  }
 
   btn.disabled = true;
   btn.textContent = 'Saving...';

@@ -120,11 +120,23 @@ function renderMatrixTable() {
   const thead = table.querySelector('thead');
   const tbody = table.querySelector('tbody');
 
-  let thHtml = '<tr><th style="width: 120px;">Course Outcome</th>';
-  currentCOPOState.po_list.forEach(po => {
-    thHtml += `<th class="text-center" style="min-width: 55px;">${po}</th>`;
+  let thHtml = '<tr><th style="width: 130px;">Course Outcome</th>';
+  currentCOPOState.po_list.forEach((po, cIdx) => {
+    thHtml += `
+      <th class="text-center" style="min-width: 70px; padding: 4px 6px;">
+        <div style="display: flex; flex-direction: column; align-items: center; gap: 2px;">
+          <input type="text" class="cell-input text-center bold po-header-input" 
+                 data-po-index="${cIdx}" value="${po}" 
+                 style="font-size: 11px; width: 62px; padding: 2px 4px; border: 1px solid var(--border-color); background: #ffffff;"
+                 title="Click to rename this Program Outcome column"
+                 onchange="updatePOColumnName(${cIdx}, this.value)">
+          <button type="button" onclick="removePOColumn(${cIdx})" title="Remove ${po} column" 
+                  style="border: none; background: none; color: #ef4444; font-size: 13px; cursor: pointer; line-height: 1; padding: 0;">&times;</button>
+        </div>
+      </th>
+    `;
   });
-  thHtml += '<th style="width: 50px;">Action</th></tr>';
+  thHtml += '<th style="width: 60px;">Action</th></tr>';
   thead.innerHTML = thHtml;
 
   tbody.innerHTML = '';
@@ -133,21 +145,21 @@ function renderMatrixTable() {
     tr.id = `copoRow_${rIdx}`;
     let trHtml = `
       <td class="bold">
-        <input type="text" class="cell-input bold" data-field="co_name" value="${co}" style="width: 90px;">
+        <input type="text" class="cell-input bold" data-field="co_name" value="${co}" style="width: 95px;" title="Course Outcome name">
       </td>
     `;
-    currentCOPOState.po_list.forEach(po => {
+    currentCOPOState.po_list.forEach((po, cIdx) => {
       const val = (currentCOPOState.matrix[co] && currentCOPOState.matrix[co][po]) !== undefined ? currentCOPOState.matrix[co][po] : '';
       trHtml += `
         <td class="text-center">
           <input type="number" min="0" max="3" step="1" class="cell-input text-center bold" 
-                 data-co="${co}" data-po="${po}" value="${val !== 0 ? val : ''}" placeholder="-">
+                 data-po-col="${cIdx}" data-co="${co}" data-po="${po}" value="${val !== 0 ? val : ''}" placeholder="-">
         </td>
       `;
     });
     trHtml += `
       <td class="text-center">
-        <button type="button" class="btn btn-outline btn-sm" style="color:#ef4444;padding:2px 6px;" onclick="removeCORow(${rIdx})">&times;</button>
+        <button type="button" class="btn btn-outline btn-sm" style="color:#ef4444;padding:2px 6px;" onclick="removeCORow(${rIdx})" title="Delete row">&times;</button>
       </td>
     `;
     tr.innerHTML = trHtml;
@@ -155,9 +167,39 @@ function renderMatrixTable() {
   });
 }
 
+function updatePOColumnName(cIdx, newName) {
+  const clean = newName.trim().toUpperCase();
+  if (!clean) return;
+  const oldName = currentCOPOState.po_list[cIdx];
+  if (oldName === clean) return;
+  
+  // Update in matrix dict for each CO
+  currentCOPOState.co_list.forEach(co => {
+    if (currentCOPOState.matrix[co]) {
+      const val = currentCOPOState.matrix[co][oldName] || 0;
+      delete currentCOPOState.matrix[co][oldName];
+      currentCOPOState.matrix[co][clean] = val;
+    }
+  });
+  currentCOPOState.po_list[cIdx] = clean;
+  renderMatrixTable();
+}
+
+function removePOColumn(cIdx) {
+  const poName = currentCOPOState.po_list[cIdx];
+  if (!confirm(`Are you sure you want to remove column ${poName}?`)) return;
+  currentCOPOState.po_list.splice(cIdx, 1);
+  currentCOPOState.co_list.forEach(co => {
+    if (currentCOPOState.matrix[co]) {
+      delete currentCOPOState.matrix[co][poName];
+    }
+  });
+  renderMatrixTable();
+}
+
 function addPOColumn() {
   const count = currentCOPOState.po_list.length + 1;
-  const name = prompt('Enter new Program Outcome name (e.g. PSO3 or PO13):', `PSO${count - 12 > 0 ? count - 12 : count}`);
+  const name = prompt('Enter new Program Outcome name (e.g. PSO3 or PO12):', `PSO${count - 11 > 0 ? count - 11 : count}`);
   if (!name || !name.trim()) return;
 
   const cleanName = name.trim().toUpperCase();
@@ -192,9 +234,21 @@ function removeCORow(idx) {
 }
 
 function collectMatrixFromUI() {
-  const rows = document.getElementById('copoMatrixTable').querySelectorAll('tbody tr');
+  const table = document.getElementById('copoMatrixTable');
+  const rows = table.querySelectorAll('tbody tr');
   const matrix = {};
   const co_list = [];
+
+  // Read current header names directly from header inputs
+  const headerInputs = table.querySelectorAll('thead .po-header-input');
+  const active_po_list = [];
+  headerInputs.forEach((inp, idx) => {
+    const val = inp.value.trim().toUpperCase() || currentCOPOState.po_list[idx] || `PO${idx+1}`;
+    active_po_list.push(val);
+  });
+  if (active_po_list.length > 0) {
+    currentCOPOState.po_list = active_po_list;
+  }
 
   rows.forEach(tr => {
     const coInp = tr.querySelector('input[data-field="co_name"]');
@@ -202,17 +256,20 @@ function collectMatrixFromUI() {
     co_list.push(co);
     matrix[co] = {};
 
-    currentCOPOState.po_list.forEach(po => {
-      const inp = tr.querySelector(`input[data-po="${po}"]`);
+    active_po_list.forEach((po, cIdx) => {
+      const inp = tr.querySelector(`input[data-po-col="${cIdx}"]`) || tr.querySelector(`input[data-po="${po}"]`);
       const val = inp && inp.value.trim() !== '' ? parseFloat(inp.value.trim()) : 0;
       matrix[co][po] = val;
     });
   });
 
+  currentCOPOState.co_list = co_list;
+  currentCOPOState.matrix = matrix;
+
   return {
     matrix: matrix,
     co_list: co_list,
-    po_list: currentCOPOState.po_list
+    po_list: active_po_list
   };
 }
 

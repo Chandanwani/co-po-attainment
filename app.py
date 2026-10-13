@@ -194,6 +194,19 @@ def serve_static(filename):
 @app.route('/')
 def page1_teacher():
     """Page 1: Teacher & Course information (NO NAVBAR)."""
+    # If starting fresh via ?new=1, clear current session
+    if request.args.get('new') == '1':
+        session.clear()
+        session['sid'] = secrets.token_hex(16)
+        sid = session['sid']
+        TEMP_DATA_STORE[sid] = {
+            'teacher': {'faculty_name': '', 'subject': '', 'class_name': '', 'division': '', 'semester': '', 'academic_year': ''},
+            'direct_raw': None, 'direct_computed': None, 'indirect_raw': None, 'indirect_computed': None,
+            'weighted_computed': None, 'copo_mapping': None, 'copo_computed': None
+        }
+        save_session_state(sid)
+        return render_template('page1_teacher.html', teacher={}, page_step=1)
+
     sid = get_session_id()
     teacher = TEMP_DATA_STORE[sid].get('teacher', {})
     if not teacher.get('faculty_name') and 'teacher' in session:
@@ -237,6 +250,20 @@ def page4_report():
 # =========================================================================
 # API ENDPOINTS
 # =========================================================================
+
+@app.route('/api/reset-session', methods=['POST'])
+def api_reset_session():
+    """Clears current user session and in-memory/disk state."""
+    session.clear()
+    session['sid'] = secrets.token_hex(16)
+    sid = session['sid']
+    TEMP_DATA_STORE[sid] = {
+        'teacher': {'faculty_name': '', 'subject': '', 'class_name': '', 'division': '', 'semester': '', 'academic_year': ''},
+        'direct_raw': None, 'direct_computed': None, 'indirect_raw': None, 'indirect_computed': None,
+        'weighted_computed': None, 'copo_mapping': None, 'copo_computed': None
+    }
+    save_session_state(sid)
+    return jsonify({'success': True, 'message': 'Session cleared successfully.'})
 
 @app.route('/api/save-teacher', methods=['POST'])
 def api_save_teacher():
