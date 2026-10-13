@@ -120,6 +120,21 @@
     </div>
   </div>
 
+  <!-- Empty State Banner shown when no data is uploaded yet -->
+  <div id="repNoDataNotice" class="card mb-16" style="display: none; text-align: center; padding: 40px 24px;">
+    <div style="font-size: 40px; margin-bottom: 12px;">📊</div>
+    <h3 style="font-size: 18px; font-weight: 700; color: var(--primary);">No Assessment Data Uploaded Yet</h3>
+    <p style="font-size: 14px; color: var(--text-muted); max-width: 520px; margin: 8px auto 20px auto;">
+      You have not uploaded any student assessment marks yet. Please upload your student marks in Step 2 to generate CO-PO attainment calculations and graphs.
+    </p>
+    <a href="{{ url_for('page2_assessment') }}" class="btn btn-primary btn-lg">
+      &rarr; Go to Step 2: Upload Assessment Marks
+    </a>
+  </div>
+
+  <!-- Main Report Content (Hidden when empty) -->
+  <div id="repMainContent">
+
   <!-- Section 2: Overall Weighted CO Attainment & Summary -->
   <div class="card mb-16">
     <div class="card-header">
@@ -250,6 +265,8 @@
       </table>
     </div>
   </div>
+
+  </div> <!-- End repMainContent -->
 
 </div>
 {% endblock %}

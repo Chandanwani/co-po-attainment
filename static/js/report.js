@@ -47,6 +47,22 @@ function renderReport(state) {
   let weighted = state.weighted || {};
   const copo = state.copo || {};
 
+  // Check if any assessment data has actually been uploaded
+  const hasAssessmentData = direct && direct.students && direct.students.length > 0;
+  const noDataNotice = document.getElementById('repNoDataNotice');
+  const reportMainContent = document.getElementById('repMainContent');
+
+  if (!hasAssessmentData) {
+    if (noDataNotice) noDataNotice.style.display = 'block';
+    if (reportMainContent) reportMainContent.style.display = 'none';
+    const repOverall = document.getElementById('repOverallAtt');
+    if (repOverall) repOverall.textContent = 'No Data Evaluated';
+    return;
+  } else {
+    if (noDataNotice) noDataNotice.style.display = 'none';
+    if (reportMainContent) reportMainContent.style.display = 'block';
+  }
+
   // If weighted attainment not yet computed, fallback to direct average
   if ((weighted.overall_attainment === undefined || weighted.overall_attainment === null) && direct.co_summaries && direct.co_summaries.length > 0) {
     const validAtts = direct.co_summaries.map(c => parseFloat(c.attainment) || 0);
@@ -82,6 +98,8 @@ function renderReport(state) {
   } else if (copo.overall_po_attainment !== undefined && copo.overall_po_attainment !== null) {
     document.getElementById('repOverallAtt').textContent =
       `${copo.overall_po_attainment} / 3.00 (${copo.overall_po_level || 'Attained'})`;
+  } else {
+    document.getElementById('repOverallAtt').textContent = '- / 3.00';
   }
 
   // 1. Weighted CO Attainment Table
