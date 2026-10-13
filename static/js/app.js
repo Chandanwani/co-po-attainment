@@ -575,8 +575,128 @@ function renderDirectResults(data) {
     tbodyStd.appendChild(tr);
   });
 
+  // Populate Assessment Targets in Learner Target Select
+  populateLearnerTargets(data.assessment_summaries);
+
+  // Trigger Slow and Fast Learners Categorization
+  updateLearnersCategorization(data);
+
+  // Save to client-side localStorage state manager
+  if (typeof saveStoredState === 'function') {
+    saveStoredState({ direct: data });
+  }
+
   // Render Charts
   renderDirectCharts(data);
+}
+
+let currentComputedDirect = null;
+
+function populateLearnerTargets(summaries) {
+  const sel = document.getElementById('learnerTargetSelect');
+  if (!sel) return;
+  const currVal = sel.value;
+  sel.innerHTML = '<option value="overall">Overall Marks (Aggregate)</option>';
+  if (summaries && summaries.length > 0) {
+    summaries.forEach(a => {
+      const opt = document.createElement('option');
+      opt.value = a.name;
+      opt.textContent = `${a.name} (Max: ${a.max_marks})`;
+      sel.appendChild(opt);
+    });
+  }
+  if (currVal && Array.from(sel.options).some(o => o.value === currVal)) {
+    sel.value = currVal;
+  }
+}
+
+async function updateLearnersCategorization(overrideDirect) {
+  const directData = overrideDirect || currentComputedDirect;
+  if (!directData || !directData.students) return;
+  currentComputedDirect = directData;
+
+  const target = document.getElementById('learnerTargetSelect') ? document.getElementById('learnerTargetSelect').value : 'overall';
+  const slowThreshold = parseFloat(document.getElementById('slowThresholdInput') ? document.getElementById('slowThresholdInput').value : 50) || 50;
+  const fastThreshold = parseFloat(document.getElementById('fastThresholdInput') ? document.getElementById('fastThresholdInput').value : 70) || 70;
+
+  // Update label indicators
+  if (document.getElementById('lblSlowThresh')) document.getElementById('lblSlowThresh').textContent = slowThreshold;
+  if (document.getElementById('lblFastThresh')) document.getElementById('lblFastThresh').textContent = fastThreshold;
+
+  try {
+    const res = await fetch('/api/categorize-learners', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        target_assessment: target,
+        slow_threshold_pct: slowThreshold,
+        fast_threshold_pct: fastThreshold,
+        direct_computed: directData
+      })
+    });
+    const result = await res.json();
+    if (result.success && result.data) {
+      renderLearnersTables(result.data);
+      if (typeof saveStoredState === 'function') {
+        saveStoredState({ learners: result.data });
+      }
+    }
+  } catch (e) {
+    console.warn('Categorize learners error:', e);
+  }
+}
+
+function renderLearnersTables(data) {
+  // Update counts
+  if (document.getElementById('slowLearnerCount')) document.getElementById('slowLearnerCount').textContent = data.slow_count;
+  if (document.getElementById('slowLearnerPct')) document.getElementById('slowLearnerPct').textContent = `${data.slow_pct}% of cohort`;
+  if (document.getElementById('badgeSlowTotal')) document.getElementById('badgeSlowTotal').textContent = `${data.slow_count} Students`;
+
+  if (document.getElementById('fastLearnerCount')) document.getElementById('fastLearnerCount').textContent = data.fast_count;
+  if (document.getElementById('fastLearnerPct')) document.getElementById('fastLearnerPct').textContent = `${data.fast_pct}% of cohort`;
+  if (document.getElementById('badgeFastTotal')) document.getElementById('badgeFastTotal').textContent = `${data.fast_count} Students`;
+
+  // Render Slow Learners Table
+  const slowTbody = document.getElementById('slowLearnersTable') ? document.getElementById('slowLearnersTable').querySelector('tbody') : null;
+  if (slowTbody) {
+    slowTbody.innerHTML = '';
+    if (!data.slow_learners || data.slow_learners.length === 0) {
+      slowTbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted" style="padding: 16px;">No slow learners identified under this criteria.</td></tr>';
+    } else {
+      data.slow_learners.forEach(s => {
+        const tr = document.createElement('tr');
+        const defCos = s.deficient_cos && s.deficient_cos.length > 0 ? s.deficient_cos.join(', ') : 'Remedial coaching recommended';
+        tr.innerHTML = `
+          <td class="bold" style="color: #991b1b;">${s.roll_no}</td>
+          <td>${s.name}</td>
+          <td class="text-center bold" style="color: #dc2626;">${s.score_pct}%</td>
+          <td><span style="color: #b91c1c; font-size: 11px;">⚠️ ${defCos}</span></td>
+        `;
+        slowTbody.appendChild(tr);
+      });
+    }
+  }
+
+  // Render Fast Learners Table
+  const fastTbody = document.getElementById('fastLearnersTable') ? document.getElementById('fastLearnersTable').querySelector('tbody') : null;
+  if (fastTbody) {
+    fastTbody.innerHTML = '';
+    if (!data.fast_learners || data.fast_learners.length === 0) {
+      fastTbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted" style="padding: 16px;">No fast learners identified under this criteria.</td></tr>';
+    } else {
+      data.fast_learners.forEach(s => {
+        const tr = document.createElement('tr');
+        const act = s.advanced_action || 'NPTEL/MOOCs & Peer Tutoring';
+        tr.innerHTML = `
+          <td class="bold" style="color: #166534;">${s.roll_no}</td>
+          <td>${s.name}</td>
+          <td class="text-center bold" style="color: #15803d;">${s.score_pct}%</td>
+          <td><span style="color: #15803d; font-size: 11px;">🌟 ${act}</span></td>
+        `;
+        fastTbody.appendChild(tr);
+      });
+    }
+  }
 }
 
 function renderDirectCharts(data) {

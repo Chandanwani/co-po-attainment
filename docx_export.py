@@ -79,19 +79,36 @@ def create_word_report(report_data: Dict[str, Any]) -> io.BytesIO:
     po_results = copo.get('po_results') or []
     mapping_matrix = copo.get('matrix') or {}
 
+    # Institutional Accreditation Header
+    inst_p = doc.add_paragraph()
+    inst_p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    run_inst = inst_p.add_run("D. Y. PATIL PRATISHTHAN'S\nD. Y. PATIL COLLEGE OF ENGINEERING, AKURDI, PUNE - 411044\n")
+    run_inst.font.name = "Arial"
+    run_inst.font.size = Pt(13)
+    run_inst.font.bold = True
+    run_inst.font.color.rgb = RGBColor(30, 58, 138)
+    
+    run_subinst = inst_p.add_run("(Approved by AICTE, Recognized by DTE, Affiliated to SPPU, Accredited by NAAC with 'A' Grade, NBA Accredited, Autonomous AY 2024-25)")
+    run_subinst.font.name = "Arial"
+    run_subinst.font.size = Pt(8.5)
+    run_subinst.font.italic = True
+    run_subinst.font.color.rgb = RGBColor(100, 116, 139)
+
+    doc.add_paragraph()
+
     # Title
     title_p = doc.add_paragraph()
     title_p.alignment = WD_ALIGN_PARAGRAPH.CENTER
     run_t = title_p.add_run("COURSE OUTCOME & PROGRAM OUTCOME ATTAINMENT REPORT")
     run_t.font.name = "Arial"
-    run_t.font.size = Pt(16)
+    run_t.font.size = Pt(15)
     run_t.font.bold = True
     run_t.font.color.rgb = RGBColor(30, 41, 59)
 
     sub_p = doc.add_paragraph()
     sub_p.alignment = WD_ALIGN_PARAGRAPH.CENTER
     run_s = sub_p.add_run(f"Subject: {teacher.get('subject', 'N/A')}  |  Academic Year: {teacher.get('academic_year', 'N/A')}")
-    run_s.font.size = Pt(11)
+    run_s.font.size = Pt(10.5)
     run_s.font.color.rgb = RGBColor(100, 116, 139)
 
     doc.add_paragraph()

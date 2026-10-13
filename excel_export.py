@@ -622,22 +622,27 @@ def create_students_only_excel(direct_data: Dict[str, Any], teacher: Dict[str, A
     direct_data = direct_data or {}
     teacher = teacher or {}
 
-    ws["A1"] = f"Student Performance & Attainment Report - {teacher.get('subject', 'Course')}"
-    ws["A1"].font = TITLE_FONT
+    ws["A1"] = "D. Y. PATIL PRATISHTHAN'S D. Y. PATIL COLLEGE OF ENGINEERING, AKURDI, PUNE - 411044"
+    ws["A1"].font = Font(name="Calibri", size=13, bold=True, color="1E3A8A")
+    ws["A2"] = "(Approved by AICTE, Recognized by DTE, Affiliated to SPPU, Accredited by NAAC with 'A' Grade, NBA Accredited, Autonomous AY 2024-25)"
+    ws["A2"].font = Font(name="Calibri", size=9, italic=True, color="475569")
+
+    ws["A4"] = f"Student Performance & Attainment Report - {teacher.get('subject', 'Course')}"
+    ws["A4"].font = TITLE_FONT
 
     meta_info = f"Faculty: {teacher.get('faculty_name', 'N/A')} | Class: {teacher.get('class_name', 'N/A')} ({teacher.get('division', 'A')}) | Academic Year: {teacher.get('academic_year', 'N/A')}"
-    ws["A2"] = meta_info
-    ws["A2"].font = Font(name="Calibri", size=10, italic=True, color="64748B")
+    ws["A5"] = meta_info
+    ws["A5"].font = Font(name="Calibri", size=10, italic=True, color="64748B")
 
     active_cols = direct_data.get("active_columns", [])
     col_names = [c["name"] for c in active_cols]
 
     headers = ["Roll No", "Student Name"] + col_names + ["Total Obtained", "Max Total", "Percentage (%)", "Passed COs", "Status"]
     for c_idx, h in enumerate(headers, start=1):
-        ws.cell(row=4, column=c_idx, value=h)
-    style_header_row(ws, 4, len(headers))
+        ws.cell(row=7, column=c_idx, value=h)
+    style_header_row(ws, 7, len(headers))
 
-    r_idx = 5
+    r_idx = 8
     for s in direct_data.get("students", []):
         status_label = "All Passed" if s.get("passed_all") else "Needs Attention"
         row_vals = [s.get("roll_no"), s.get("name")]

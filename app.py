@@ -25,7 +25,8 @@ from calculations import (
     validate_and_compute_indirect,
     compute_weighted_co_attainment,
     compute_po_attainment,
-    parse_delimited_or_matrix_text
+    parse_delimited_or_matrix_text,
+    categorize_slow_fast_learners
 )
 from excel_export import (
     create_complete_excel_report,
@@ -35,7 +36,7 @@ from excel_export import (
     create_students_only_excel
 )
 from docx_export import create_word_report
-from pdf_export import create_pdf_report
+from pdf_export import create_pdf_report, create_slow_fast_learners_pdf
 
 import mimetypes
 mimetypes.add_type('text/css', '.css')
@@ -133,7 +134,10 @@ def get_session_id() -> str:
     if 'sid' not in session:
         session['sid'] = secrets.token_hex(16)
     sid = session['sid']
-    load_session_state(sid)
+    state = load_session_state(sid)
+    # If session has teacher cookie info, ensure state mirrors it
+    if 'teacher' in session and isinstance(session['teacher'], dict) and session['teacher'].get('faculty_name'):
+        state['teacher'] = session['teacher']
     return sid
 
 
@@ -192,6 +196,8 @@ def page1_teacher():
     """Page 1: Teacher & Course information (NO NAVBAR)."""
     sid = get_session_id()
     teacher = TEMP_DATA_STORE[sid].get('teacher', {})
+    if not teacher.get('faculty_name') and 'teacher' in session:
+        teacher = session['teacher']
     return render_template('page1_teacher.html', teacher=teacher, page_step=1)
 
 
@@ -200,9 +206,9 @@ def page2_assessment():
     """Page 2: Direct and indirect assessment data."""
     sid = get_session_id()
     teacher = TEMP_DATA_STORE[sid].get('teacher', {})
-    # Teacher must have faculty_name and subject
-    if not teacher.get('faculty_name') or not teacher.get('subject'):
-        return redirect(url_for('page1_teacher'))
+    if not teacher.get('faculty_name') and 'teacher' in session:
+        teacher = session['teacher']
+        TEMP_DATA_STORE[sid]['teacher'] = teacher
     return render_template('page2_assessment.html', teacher=teacher, page_step=2)
 
 
@@ -211,8 +217,9 @@ def page3_copo():
     """Page 3: CO-PO mapping and PO attainment calculation."""
     sid = get_session_id()
     teacher = TEMP_DATA_STORE[sid].get('teacher', {})
-    if not teacher.get('faculty_name') or not teacher.get('subject'):
-        return redirect(url_for('page1_teacher'))
+    if not teacher.get('faculty_name') and 'teacher' in session:
+        teacher = session['teacher']
+        TEMP_DATA_STORE[sid]['teacher'] = teacher
     return render_template('page3_copo.html', teacher=teacher, page_step=3)
 
 
@@ -221,8 +228,9 @@ def page4_report():
     """Page 4: Final Comprehensive Report & Downloads."""
     sid = get_session_id()
     teacher = TEMP_DATA_STORE[sid].get('teacher', {})
-    if not teacher.get('faculty_name') or not teacher.get('subject'):
-        return redirect(url_for('page1_teacher'))
+    if not teacher.get('faculty_name') and 'teacher' in session:
+        teacher = session['teacher']
+        TEMP_DATA_STORE[sid]['teacher'] = teacher
     return render_template('page4_report.html', teacher=teacher, page_step=4)
 
 
@@ -250,7 +258,34 @@ def api_save_teacher():
         'academic_year': data.get('academic_year', '').strip()
     }
     TEMP_DATA_STORE[sid]['teacher'] = teacher_info
+    session['teacher'] = teacher_info
+    save_session_state(sid)
     return jsonify({'success': True, 'teacher': teacher_info, 'redirect': url_for('page2_assessment')})
+
+
+@app.route('/api/sync-state', methods=['POST'])
+def api_sync_state():
+    """Syncs client-side state into backend session store for cross-lambda persistence."""
+    sid = get_session_id()
+    state_payload = request.get_json(silent=True) or {}
+    
+    current_state = TEMP_DATA_STORE[sid]
+    if 'teacher' in state_payload and state_payload['teacher']:
+        current_state['teacher'] = state_payload['teacher']
+        session['teacher'] = state_payload['teacher']
+    if 'direct' in state_payload and state_payload['direct']:
+        current_state['direct_computed'] = state_payload['direct']
+    if 'indirect' in state_payload and state_payload['indirect']:
+        current_state['indirect_computed'] = state_payload['indirect']
+    if 'weighted' in state_payload and state_payload['weighted']:
+        current_state['weighted_computed'] = state_payload['weighted']
+    if 'copo' in state_payload and state_payload['copo']:
+        current_state['copo_computed'] = state_payload['copo']
+    if 'learners' in state_payload and state_payload['learners']:
+        current_state['learners_data'] = state_payload['learners']
+        
+    save_session_state(sid)
+    return jsonify({'success': True, 'message': 'Session state synchronized successfully.'})
 
 
 @app.route('/api/upload-direct', methods=['POST'])
@@ -647,8 +682,8 @@ def api_upload_copo():
         # All rows including headers are data rows
         all_data_rows = [headers] + rows
         col_count = len(headers)
-        # Assign PO1, PO2, ..., PO12, PSO1...
-        po_labels = [f"PO{i+1}" if i < 12 else f"PSO{i-11}" for i in range(col_count)]
+        # Assign PO1..PO11, PSO1..PSO3
+        po_labels = [f"PO{i+1}" if i < 11 else f"PSO{i-10}" for i in range(col_count)]
         co_labels = [f"CO{i+1}" for i in range(len(all_data_rows))]
 
         matrix_dict = {}
@@ -738,6 +773,87 @@ def api_compute_copo():
     return jsonify({'success': True, 'data': TEMP_DATA_STORE[sid]['copo_computed']})
 
 
+@app.route('/api/categorize-learners', methods=['POST'])
+def api_categorize_learners():
+    """Categorizes students into Slow Learners and Fast Learners based on CCE or overall marks."""
+    sid = get_session_id()
+    data = request.get_json(silent=True) or {}
+    
+    direct_data = TEMP_DATA_STORE[sid].get('direct_computed')
+    if not direct_data:
+        # Check if direct data was provided in request payload
+        direct_data = data.get('direct_computed')
+        if not direct_data:
+            return jsonify({'success': False, 'message': 'Direct assessment data not found. Please upload marks first.'}), 400
+    
+    students = direct_data.get('students', [])
+    assessment_summaries = direct_data.get('assessment_summaries', [])
+    
+    try:
+        slow_threshold_pct = float(data.get('slow_threshold_pct', 50.0))
+        fast_threshold_pct = float(data.get('fast_threshold_pct', 70.0))
+    except (ValueError, TypeError):
+        slow_threshold_pct = 50.0
+        fast_threshold_pct = 70.0
+        
+    target_assessment = data.get('target_assessment', 'overall')
+    
+    result = categorize_slow_fast_learners(
+        students=students,
+        slow_threshold_pct=slow_threshold_pct,
+        fast_threshold_pct=fast_threshold_pct,
+        target_assessment=target_assessment,
+        assessment_summaries=assessment_summaries
+    )
+    
+    TEMP_DATA_STORE[sid]['learners_data'] = result
+    save_session_state(sid)
+    
+    return jsonify({'success': True, 'data': result})
+
+
+@app.route('/download/learners-pdf')
+def download_learners_pdf():
+    """Generates and downloads the dedicated Slow & Fast Learners PDF report."""
+    sid = get_session_id()
+    state = TEMP_DATA_STORE[sid]
+    
+    direct_data = state.get('direct_computed') or {}
+    learners_data = state.get('learners_data')
+    
+    if not learners_data and direct_data.get('students'):
+        # Compute default
+        learners_data = categorize_slow_fast_learners(
+            students=direct_data.get('students', []),
+            slow_threshold_pct=50.0,
+            fast_threshold_pct=70.0,
+            target_assessment='overall',
+            assessment_summaries=direct_data.get('assessment_summaries', [])
+        )
+        state['learners_data'] = learners_data
+        
+    if not learners_data:
+        return jsonify({'success': False, 'message': 'No student data available to generate Slow & Fast Learners report.'}), 400
+        
+    report_data = {
+        'teacher': state.get('teacher') or {},
+        'direct': {'data': direct_data},
+        'copo': state.get('copo_computed') or {}
+    }
+    
+    pdf_io = create_slow_fast_learners_pdf(report_data, learners_data)
+    teacher = state.get('teacher') or {}
+    subject_safe = re.sub(r'[^a-zA-Z0-9_-]', '_', teacher.get('subject', 'Course'))
+    filename = f"Slow_and_Fast_Learners_Report_{subject_safe}.pdf"
+    
+    return send_file(
+        pdf_io,
+        mimetype="application/pdf",
+        as_attachment=True,
+        download_name=filename
+    )
+
+
 @app.route('/api/get-full-state', methods=['GET'])
 def api_get_full_state():
     """Returns the complete evaluation state for rendering."""
@@ -748,7 +864,8 @@ def api_get_full_state():
         'direct': state.get('direct_computed'),
         'indirect': state.get('indirect_computed'),
         'weighted': state.get('weighted_computed'),
-        'copo': state.get('copo_computed')
+        'copo': state.get('copo_computed'),
+        'learners': state.get('learners_data')
     })
 
 

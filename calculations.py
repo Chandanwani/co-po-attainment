@@ -711,3 +711,91 @@ def parse_delimited_or_matrix_text(text: str) -> Tuple[List[str], List[List[str]
         return [], []
 
     return raw_rows[0], raw_rows[1:]
+
+
+def categorize_slow_fast_learners(
+    students: List[Dict[str, Any]],
+    slow_threshold_pct: float = 50.0,
+    fast_threshold_pct: float = 70.0,
+    target_assessment: Optional[str] = None,
+    assessment_summaries: Optional[List[Dict[str, Any]]] = None
+) -> Dict[str, Any]:
+    """
+    Categorizes students into Slow Learners and Fast Learners.
+    Can evaluate based on overall percentage or a specific assessment tool.
+    Does not require average score calculation as students are categorized directly.
+    """
+    slow_learners = []
+    fast_learners = []
+    other_learners = []
+
+    is_assessment_specific = bool(target_assessment and str(target_assessment).strip().lower() != 'overall')
+
+    target_max_marks = None
+    if is_assessment_specific and assessment_summaries:
+        for a in assessment_summaries:
+            if str(a.get('name', '')).strip().lower() == str(target_assessment).strip().lower():
+                target_max_marks = float(a.get('max_marks', 0.0))
+                break
+
+    for s in students:
+        roll_no = str(s.get('roll_no', ''))
+        name = str(s.get('name', ''))
+        marks_dict = s.get('marks', {})
+
+        if is_assessment_specific:
+            try:
+                score = float(marks_dict.get(target_assessment, 0.0) or 0.0)
+            except (ValueError, TypeError):
+                score = 0.0
+            max_m = target_max_marks if (target_max_marks and target_max_marks > 0) else 100.0
+            pct = round((score / max_m) * 100.0, 2)
+            score_disp = f"{score} / {max_m}"
+        else:
+            pct = float(s.get('percentage', 0.0) or 0.0)
+            obt = s.get('total_obtained', 0.0)
+            tot_max = s.get('total_max', 0.0)
+            score_disp = f"{obt} / {tot_max}"
+
+        passed_cos = s.get('passed_cos', [])
+        all_cos = list(s.get('co_percentages', {}).keys())
+        deficient_cos = [co for co in all_cos if co not in passed_cos]
+
+        record = {
+            'roll_no': roll_no,
+            'name': name,
+            'score_display': score_disp,
+            'percentage': pct,
+            'passed_cos': passed_cos,
+            'deficient_cos': deficient_cos,
+        }
+
+        if pct >= fast_threshold_pct:
+            record['category'] = 'Fast Learner'
+            record['action_plan'] = 'Advanced assignments, peer tutoring, research/hackathon projects'
+            fast_learners.append(record)
+        elif pct < slow_threshold_pct:
+            record['category'] = 'Slow Learner'
+            record['action_plan'] = 'Remedial classes, simplified concept notes, practice problem sets'
+            slow_learners.append(record)
+        else:
+            record['category'] = 'Average Learner'
+            record['action_plan'] = 'Regular course assignments and periodic review'
+            other_learners.append(record)
+
+    fast_learners.sort(key=lambda x: x['percentage'], reverse=True)
+    slow_learners.sort(key=lambda x: x['percentage'])
+
+    return {
+        'target_assessment': target_assessment or 'Overall Evaluation',
+        'slow_threshold_pct': slow_threshold_pct,
+        'fast_threshold_pct': fast_threshold_pct,
+        'total_evaluated': len(students),
+        'fast_count': len(fast_learners),
+        'fast_pct': round((len(fast_learners) / len(students) * 100.0) if students else 0.0, 1),
+        'slow_count': len(slow_learners),
+        'slow_pct': round((len(slow_learners) / len(students) * 100.0) if students else 0.0, 1),
+        'other_count': len(other_learners),
+        'fast_learners': fast_learners,
+        'slow_learners': slow_learners
+    }

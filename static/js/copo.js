@@ -4,7 +4,7 @@
 
 let currentCOPOState = {
   co_list: ['CO1', 'CO2', 'CO3', 'CO4', 'CO5', 'CO6'],
-  po_list: ['PO1', 'PO2', 'PO3', 'PO4', 'PO5', 'PO6', 'PO7', 'PO8', 'PO9', 'PO10', 'PO11', 'PO12', 'PSO1', 'PSO2'],
+  po_list: ['PO1', 'PO2', 'PO3', 'PO4', 'PO5', 'PO6', 'PO7', 'PO8', 'PO9', 'PO10', 'PO11', 'PSO1', 'PSO2', 'PSO3'],
   matrix: {}
 };
 let copoCharts = {};
@@ -97,7 +97,7 @@ async function initializeBlankMatrix() {
     console.warn('Could not fetch evaluated COs:', e);
   }
 
-  const po_list = ['PO1', 'PO2', 'PO3', 'PO4', 'PO5', 'PO6', 'PO7', 'PO8', 'PO9', 'PO10', 'PO11', 'PO12', 'PSO1', 'PSO2'];
+  const po_list = ['PO1', 'PO2', 'PO3', 'PO4', 'PO5', 'PO6', 'PO7', 'PO8', 'PO9', 'PO10', 'PO11', 'PSO1', 'PSO2', 'PSO3'];
   const matrix = {};
 
   co_list.forEach(co => {
@@ -232,6 +232,9 @@ async function calculatePOAttainment() {
     }
 
     renderPOResults(result.data);
+    if (typeof saveStoredState === 'function') {
+      saveStoredState({ copo: result.data });
+    }
     document.getElementById('poResultsSection').style.display = 'block';
     document.getElementById('btnGoToStep4').style.display = 'inline-flex';
     const btnPdfTop = document.getElementById('btnCOPOPdfTop');

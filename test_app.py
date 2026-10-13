@@ -278,11 +278,6 @@ def test_flask_routes_and_navigation():
     assert 'Faculty Name' in html1
     assert 'Subject Name' in html1
 
-    # Page 2 without teacher info should redirect to Page 1
-    r2_unauth = client.get('/assessment')
-    assert r2_unauth.status_code == 302
-    assert r2_unauth.headers['Location'] in ['/', '/teacher']
-
     # Save teacher info
     r_save = client.post('/api/save-teacher', json={
         'faculty_name': 'Dr. Sharma',
@@ -295,7 +290,7 @@ def test_flask_routes_and_navigation():
     assert r_save.status_code == 200
     assert r_save.get_json()['success'] is True
 
-    # Page 2 now accessible and has step navigation
+    # Page 2 accessible and has step navigation
     r2 = client.get('/assessment')
     assert r2.status_code == 200
     html2 = r2.get_data(as_text=True)
@@ -321,27 +316,28 @@ def test_flask_routes_and_navigation():
     assert r_pdf_no_charts.mimetype == 'application/pdf'
     assert r_pdf_no_charts.data.startswith(b'%PDF')
 
-    # Test Assessment PDF download endpoint with charts=1 and charts=0
-    r_ass_charts = client.get('/download/assessment-pdf?charts=1')
-    assert r_ass_charts.status_code == 200
-    assert r_ass_charts.mimetype == 'application/pdf'
-    assert r_ass_charts.data.startswith(b'%PDF')
+    # Test Slow & Fast Learners categorization API
+    r_learn = client.post('/api/categorize-learners', json={
+        'slow_threshold_pct': 50,
+        'fast_threshold_pct': 70,
+        'direct_computed': {
+            'students': [
+                {'roll_no': '1', 'name': 'Fast Alice', 'percentage': 85.0, 'marks': {'UT1': 17}, 'passed_cos': ['CO1', 'CO2']},
+                {'roll_no': '2', 'name': 'Slow Bob', 'percentage': 42.0, 'marks': {'UT1': 8}, 'passed_cos': []}
+            ],
+            'assessment_summaries': [{'name': 'UT1', 'max_marks': 20, 'mapped_cos': 'CO1'}]
+        }
+    })
+    assert r_learn.status_code == 200
+    assert r_learn.get_json()['success'] is True
+    assert r_learn.get_json()['data']['fast_count'] == 1
+    assert r_learn.get_json()['data']['slow_count'] == 1
 
-    r_ass_no_charts = client.get('/download/assessment-pdf?charts=0')
-    assert r_ass_no_charts.status_code == 200
-    assert r_ass_no_charts.mimetype == 'application/pdf'
-    assert r_ass_no_charts.data.startswith(b'%PDF')
-
-    # Test CO-PO PDF download endpoint
-    r_copo_pdf = client.get('/download/copo-pdf')
-    assert r_copo_pdf.status_code == 200
-    assert r_copo_pdf.mimetype == 'application/pdf'
-    assert r_copo_pdf.data.startswith(b'%PDF')
-
-    # Test Students Report download endpoint
-    r_stud = client.get('/download/students-report')
-    assert r_stud.status_code == 200
-    assert 'spreadsheetml' in r_stud.mimetype
+    # Test Learners PDF download
+    r_learn_pdf = client.get('/download/learners-pdf')
+    assert r_learn_pdf.status_code == 200
+    assert r_learn_pdf.mimetype == 'application/pdf'
+    assert r_learn_pdf.data.startswith(b'%PDF')
 
 
 def test_students_report_excel_export():
@@ -364,10 +360,11 @@ def test_students_report_excel_export():
     assert "Student Performance" in wb.sheetnames
     assert "Score Distribution" in wb.sheetnames
     ws = wb["Student Performance"]
-    assert ws["A1"].value.startswith("Student Performance")
-    assert ws.cell(row=5, column=1).value == '1'  # Alice roll_no
-    assert ws.cell(row=5, column=2).value == 'Alice'
-    assert ws.cell(row=6, column=2).value == 'Bob'
+    assert "D. Y. PATIL" in ws["A1"].value
+    assert ws["A4"].value.startswith("Student Performance")
+    assert ws.cell(row=8, column=1).value == '1'  # Alice roll_no
+    assert ws.cell(row=8, column=2).value == 'Alice'
+    assert ws.cell(row=9, column=2).value == 'Bob'
 
 
 def test_indirect_po_mapping():

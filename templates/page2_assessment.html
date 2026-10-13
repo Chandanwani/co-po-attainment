@@ -307,6 +307,130 @@
       </div>
     </div>
 
+    <!-- Slow & Fast Learners Categorization Card -->
+    <div class="card mb-16" id="learnersCard" style="border: 2px solid #6366f1;">
+      <div class="card-header" style="background: linear-gradient(135deg, #e0e7ff 0%, #f5f3ff 100%);">
+        <div>
+          <h3 class="card-title" style="color: #3730a3; display: flex; align-items: center; gap: 8px;">
+            <span>🎯 Slow Learners &amp; Fast Learners Identification</span>
+            <span class="badge" style="background: #4f46e5; color: #fff; font-size: 11px;">OBE Remedial &amp; Advanced Mentoring</span>
+          </h3>
+          <p class="card-subtitle" style="color: #4338ca;">
+            Categorize students based on custom thresholds for specific assessments (each CCE) or overall performance.
+          </p>
+        </div>
+        <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+          <a href="{{ url_for('download_learners_pdf') }}" id="btnDownloadLearnersPdf" class="btn btn-sm" style="background: #4f46e5; border-color: #4338ca; color: #fff; font-weight: 600;">
+            📄 Download Slow &amp; Fast Learners PDF
+          </a>
+        </div>
+      </div>
+      <div style="padding: 16px;">
+        <!-- Threshold Configuration Controls -->
+        <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 14px; margin-bottom: 16px;">
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px; align-items: end;">
+            <div>
+              <label style="font-size: 12.5px; font-weight: 700; color: #1e293b; margin-bottom: 4px; display: block;">
+                Evaluation Target:
+              </label>
+              <select id="learnerTargetSelect" class="form-control" style="font-size: 13px;" onchange="updateLearnersCategorization()">
+                <option value="overall">Overall Marks (Aggregate)</option>
+              </select>
+            </div>
+            <div>
+              <label style="font-size: 12.5px; font-weight: 700; color: #991b1b; margin-bottom: 4px; display: block;">
+                Slow Learner Threshold (&lt; %):
+              </label>
+              <div style="display: flex; align-items: center; gap: 6px;">
+                <input type="number" id="slowThresholdInput" class="form-control" style="font-size: 13px; font-weight: 600; color: #991b1b;" min="10" max="100" step="5" value="50" onchange="updateLearnersCategorization()">
+                <span style="font-weight: 700; color: #64748b;">%</span>
+              </div>
+            </div>
+            <div>
+              <label style="font-size: 12.5px; font-weight: 700; color: #166534; margin-bottom: 4px; display: block;">
+                Fast Learner Threshold (&ge; %):
+              </label>
+              <div style="display: flex; align-items: center; gap: 6px;">
+                <input type="number" id="fastThresholdInput" class="form-control" style="font-size: 13px; font-weight: 600; color: #166534;" min="10" max="100" step="5" value="70" onchange="updateLearnersCategorization()">
+                <span style="font-weight: 700; color: #64748b;">%</span>
+              </div>
+            </div>
+            <div>
+              <button type="button" class="btn btn-primary btn-sm" style="width: 100%; height: 38px;" onclick="updateLearnersCategorization()">
+                🔄 Re-Categorize Learners
+              </button>
+            </div>
+          </div>
+          <div style="margin-top: 10px; font-size: 11.5px; color: #64748b;">
+            <em>Note: Fast learners are $\ge$ threshold, Slow learners are &lt; threshold. Average learners fall in-between and do not require separate classification.</em>
+          </div>
+        </div>
+
+        <!-- Summary Counts -->
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 16px;">
+          <div style="background: #fef2f2; border: 1px solid #fecaca; border-radius: 8px; padding: 12px 16px; text-align: center;">
+            <div style="font-size: 26px; font-weight: 800; color: #b91c1c;" id="slowLearnerCount">0</div>
+            <div style="font-size: 13px; font-weight: 700; color: #991b1b;">Slow Learners (&lt; <span id="lblSlowThresh">50</span>%)</div>
+            <div style="font-size: 11.5px; color: #b91c1c;" id="slowLearnerPct">0% of cohort</div>
+          </div>
+          <div style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 12px 16px; text-align: center;">
+            <div style="font-size: 26px; font-weight: 800; color: #15803d;" id="fastLearnerCount">0</div>
+            <div style="font-size: 13px; font-weight: 700; color: #166534;">Fast Learners (&ge; <span id="lblFastThresh">70</span>%)</div>
+            <div style="font-size: 11.5px; color: #15803d;" id="fastLearnerPct">0% of cohort</div>
+          </div>
+        </div>
+
+        <!-- Dual Tables: Slow Learners (Left) & Fast Learners (Right) -->
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 16px;">
+          <!-- Slow Learners Table -->
+          <div style="border: 1px solid #fecaca; border-radius: 8px; overflow: hidden;">
+            <div style="background: #fee2e2; padding: 10px 14px; border-bottom: 1px solid #fecaca; display: flex; justify-content: space-between; align-items: center;">
+              <strong style="color: #991b1b; font-size: 13px;">🔴 Slow Learners List</strong>
+              <span class="badge" style="background: #b91c1c; color: #fff;" id="badgeSlowTotal">0 Students</span>
+            </div>
+            <div class="table-responsive" style="max-height: 280px; overflow-y: auto;">
+              <table class="table table-sm" id="slowLearnersTable" style="margin-bottom: 0; font-size: 12px;">
+                <thead>
+                  <tr style="background: #fff5f5;">
+                    <th>Roll No</th>
+                    <th>Student Name</th>
+                    <th class="text-center">Score %</th>
+                    <th>Deficient COs / Focus Areas</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr><td colspan="4" class="text-center text-muted" style="padding: 16px;">No slow learners identified under this criteria.</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- Fast Learners Table -->
+          <div style="border: 1px solid #bbf7d0; border-radius: 8px; overflow: hidden;">
+            <div style="background: #dcfce7; padding: 10px 14px; border-bottom: 1px solid #bbf7d0; display: flex; justify-content: space-between; align-items: center;">
+              <strong style="color: #166534; font-size: 13px;">🟢 Fast Learners List</strong>
+              <span class="badge" style="background: #15803d; color: #fff;" id="badgeFastTotal">0 Students</span>
+            </div>
+            <div class="table-responsive" style="max-height: 280px; overflow-y: auto;">
+              <table class="table table-sm" id="fastLearnersTable" style="margin-bottom: 0; font-size: 12px;">
+                <thead>
+                  <tr style="background: #f0fdf4;">
+                    <th>Roll No</th>
+                    <th>Student Name</th>
+                    <th class="text-center">Score %</th>
+                    <th>Advanced Activities</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr><td colspan="4" class="text-center text-muted" style="padding: 16px;">No fast learners identified under this criteria.</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- Live Graphs for Direct Assessment (Separate, Independent Cards to Prevent Collision) -->
     <div style="margin-top: 24px; margin-bottom: 8px;">
       <h3 style="font-size: 16px; font-weight: 700; color: var(--primary); margin-bottom: 4px;">Direct Assessment Visual Analytics</h3>
