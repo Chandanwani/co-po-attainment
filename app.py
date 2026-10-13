@@ -822,6 +822,22 @@ def api_categorize_learners():
     except (ValueError, TypeError):
         slow_threshold_pct = 50.0
         fast_threshold_pct = 70.0
+
+    threshold_mode = data.get('threshold_mode', 'marks')
+    slow_threshold_marks = data.get('slow_threshold_marks')
+    fast_threshold_marks = data.get('fast_threshold_marks')
+
+    if slow_threshold_marks is not None:
+        try:
+            slow_threshold_marks = float(slow_threshold_marks)
+        except (ValueError, TypeError):
+            slow_threshold_marks = None
+
+    if fast_threshold_marks is not None:
+        try:
+            fast_threshold_marks = float(fast_threshold_marks)
+        except (ValueError, TypeError):
+            fast_threshold_marks = None
         
     target_assessment = data.get('target_assessment', 'overall')
     
@@ -830,7 +846,10 @@ def api_categorize_learners():
         slow_threshold_pct=slow_threshold_pct,
         fast_threshold_pct=fast_threshold_pct,
         target_assessment=target_assessment,
-        assessment_summaries=assessment_summaries
+        assessment_summaries=assessment_summaries,
+        threshold_mode=threshold_mode,
+        slow_threshold_marks=slow_threshold_marks,
+        fast_threshold_marks=fast_threshold_marks
     )
     
     TEMP_DATA_STORE[sid]['learners_data'] = result
@@ -855,7 +874,8 @@ def download_learners_pdf():
             slow_threshold_pct=50.0,
             fast_threshold_pct=70.0,
             target_assessment='overall',
-            assessment_summaries=direct_data.get('assessment_summaries', [])
+            assessment_summaries=direct_data.get('assessment_summaries', []),
+            threshold_mode='marks'
         )
         state['learners_data'] = learners_data
         
@@ -865,6 +885,7 @@ def download_learners_pdf():
     report_data = {
         'teacher': state.get('teacher') or {},
         'direct': {'data': direct_data},
+        'weighted': {'data': state.get('weighted_computed') or {}},
         'copo': state.get('copo_computed') or {}
     }
     

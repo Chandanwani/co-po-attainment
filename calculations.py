@@ -718,12 +718,15 @@ def categorize_slow_fast_learners(
     slow_threshold_pct: float = 50.0,
     fast_threshold_pct: float = 70.0,
     target_assessment: Optional[str] = None,
-    assessment_summaries: Optional[List[Dict[str, Any]]] = None
+    assessment_summaries: Optional[List[Dict[str, Any]]] = None,
+    threshold_mode: str = 'marks',
+    slow_threshold_marks: Optional[float] = None,
+    fast_threshold_marks: Optional[float] = None
 ) -> Dict[str, Any]:
     """
     Categorizes students into Slow Learners and Fast Learners.
-    Can evaluate based on overall percentage or a specific assessment tool.
-    Does not require average score calculation as students are categorized directly.
+    Supports categorization based on raw Marks (default) or Percentage.
+    Includes marks_obtained and max_marks for every student record.
     """
     slow_learners = []
     fast_learners = []
@@ -738,6 +741,38 @@ def categorize_slow_fast_learners(
                 target_max_marks = float(a.get('max_marks', 0.0))
                 break
 
+    # Determine default max marks if overall
+    if not target_max_marks or target_max_marks <= 0:
+        if students:
+            first_tot_max = students[0].get('total_max', 0.0)
+            if first_tot_max and float(first_tot_max) > 0:
+                target_max_marks = float(first_tot_max)
+            elif assessment_summaries:
+                target_max_marks = float(sum(float(a.get('max_marks', 0.0) or 0.0) for a in assessment_summaries) or 100.0)
+            else:
+                target_max_marks = 100.0
+        elif assessment_summaries:
+            target_max_marks = float(sum(float(a.get('max_marks', 0.0) or 0.0) for a in assessment_summaries) or 100.0)
+        else:
+            target_max_marks = 100.0
+
+    # If threshold_mode was not explicitly 'marks' (i.e. caller passed slow_threshold_pct/fast_threshold_pct without slow_threshold_marks)
+    # determine whether to evaluate by marks or percentage
+    if slow_threshold_marks is None and fast_threshold_marks is None:
+        # Default evaluation: if callers only provided percentage thresholds, mode is percentage
+        threshold_mode = 'percentage'
+        slow_threshold_marks = round((slow_threshold_pct / 100.0) * target_max_marks, 2)
+        fast_threshold_marks = round((fast_threshold_pct / 100.0) * target_max_marks, 2)
+    else:
+        threshold_mode = 'marks'
+        if slow_threshold_marks is None:
+            slow_threshold_marks = round((slow_threshold_pct / 100.0) * target_max_marks, 2)
+        if fast_threshold_marks is None:
+            fast_threshold_marks = round((fast_threshold_pct / 100.0) * target_max_marks, 2)
+        # Update percentage representations
+        slow_threshold_pct = round((slow_threshold_marks / target_max_marks) * 100.0, 1) if target_max_marks > 0 else 50.0
+        fast_threshold_pct = round((fast_threshold_marks / target_max_marks) * 100.0, 1) if target_max_marks > 0 else 70.0
+
     for s in students:
         roll_no = str(s.get('roll_no', ''))
         name = str(s.get('name', ''))
@@ -749,32 +784,61 @@ def categorize_slow_fast_learners(
             except (ValueError, TypeError):
                 score = 0.0
             max_m = target_max_marks if (target_max_marks and target_max_marks > 0) else 100.0
-            pct = round((score / max_m) * 100.0, 2)
+            pct = round((score / max_m) * 100.0, 2) if max_m > 0 else 0.0
             score_disp = f"{score} / {max_m}"
         else:
             pct = float(s.get('percentage', 0.0) or 0.0)
-            obt = s.get('total_obtained', 0.0)
-            tot_max = s.get('total_max', 0.0)
-            score_disp = f"{obt} / {tot_max}"
+            if 'total_obtained' in s and s.get('total_obtained') is not None:
+                try:
+                    score = float(s.get('total_obtained', 0.0) or 0.0)
+                except (ValueError, TypeError):
+                    score = 0.0
+            elif marks_dict:
+                try:
+                    score = float(sum(float(v) for v in marks_dict.values() if v is not None and str(v).strip() != ''))
+                except (ValueError, TypeError):
+                    score = round((pct / 100.0) * target_max_marks, 2)
+            else:
+                score = round((pct / 100.0) * target_max_marks, 2)
+
+            try:
+                max_m = float(s.get('total_max', 0.0) or target_max_marks)
+            except (ValueError, TypeError):
+                max_m = target_max_marks
+            score_disp = f"{score} / {max_m}"
 
         passed_cos = s.get('passed_cos', [])
         all_cos = list(s.get('co_percentages', {}).keys())
         deficient_cos = [co for co in all_cos if co not in passed_cos]
 
+        # Formatting score as int if whole number
+        marks_obt_disp = int(score) if score == int(score) else round(score, 2)
+        max_m_disp = int(max_m) if max_m == int(max_m) else round(max_m, 2)
+
         record = {
             'roll_no': roll_no,
             'name': name,
             'score_display': score_disp,
+            'marks_obtained': marks_obt_disp,
+            'max_marks': max_m_disp,
             'percentage': pct,
             'passed_cos': passed_cos,
             'deficient_cos': deficient_cos,
         }
 
-        if pct >= fast_threshold_pct:
+        # Check threshold based on threshold_mode
+        if threshold_mode == 'percentage':
+            is_fast = (pct >= fast_threshold_pct)
+            is_slow = (pct < slow_threshold_pct)
+        else:  # 'marks' mode
+            is_fast = (score >= fast_threshold_marks)
+            is_slow = (score < slow_threshold_marks)
+
+        if is_fast:
             record['category'] = 'Fast Learner'
             record['action_plan'] = 'Advanced assignments, peer tutoring, research/hackathon projects'
             fast_learners.append(record)
-        elif pct < slow_threshold_pct:
+        elif is_slow:
             record['category'] = 'Slow Learner'
             record['action_plan'] = 'Remedial classes, simplified concept notes, practice problem sets'
             slow_learners.append(record)
@@ -793,8 +857,12 @@ def categorize_slow_fast_learners(
 
     return {
         'target_assessment': target_assessment or 'Overall Evaluation',
+        'threshold_mode': threshold_mode,
+        'target_max_marks': target_max_marks,
         'slow_threshold_pct': slow_threshold_pct,
         'fast_threshold_pct': fast_threshold_pct,
+        'slow_threshold_marks': slow_threshold_marks,
+        'fast_threshold_marks': fast_threshold_marks,
         'total_evaluated': len(students),
         'fast_count': len(fast_learners),
         'fast_pct': round((len(fast_learners) / len(students) * 100.0) if students else 0.0, 1),

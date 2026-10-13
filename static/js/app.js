@@ -591,16 +591,19 @@ function renderDirectResults(data) {
 }
 
 let currentComputedDirect = null;
+let currentAssessmentSummaries = [];
 
 function populateLearnerTargets(summaries) {
   const sel = document.getElementById('learnerTargetSelect');
   if (!sel) return;
+  currentAssessmentSummaries = summaries || [];
   const currVal = sel.value;
-  sel.innerHTML = '<option value="overall">Overall Marks (Aggregate)</option>';
+  sel.innerHTML = '<option value="overall" data-max="100">Overall Marks (Aggregate)</option>';
   if (summaries && summaries.length > 0) {
     summaries.forEach(a => {
       const opt = document.createElement('option');
       opt.value = a.name;
+      opt.setAttribute('data-max', a.max_marks || 100);
       opt.textContent = `${a.name} (Max: ${a.max_marks})`;
       sel.appendChild(opt);
     });
@@ -608,6 +611,40 @@ function populateLearnerTargets(summaries) {
   if (currVal && Array.from(sel.options).some(o => o.value === currVal)) {
     sel.value = currVal;
   }
+  updateLearnerMaxLabels();
+}
+
+function updateLearnerMaxLabels() {
+  const sel = document.getElementById('learnerTargetSelect');
+  if (!sel) return;
+  const selOpt = sel.options[sel.selectedIndex];
+  let maxMarks = 100;
+  if (selOpt) {
+    const dMax = parseFloat(selOpt.getAttribute('data-max'));
+    if (!isNaN(dMax) && dMax > 0) {
+      maxMarks = dMax;
+    }
+  }
+  if (sel.value === 'overall' && currentComputedDirect && currentComputedDirect.students && currentComputedDirect.students.length > 0) {
+    const totMax = parseFloat(currentComputedDirect.students[0].total_max);
+    if (!isNaN(totMax) && totMax > 0) maxMarks = totMax;
+  }
+  const maxLabel = `/ ${maxMarks}`;
+  if (document.getElementById('lblSlowMax')) document.getElementById('lblSlowMax').textContent = maxLabel;
+  if (document.getElementById('lblFastMax')) document.getElementById('lblFastMax').textContent = maxLabel;
+  return maxMarks;
+}
+
+function onLearnerTargetChange() {
+  const maxMarks = updateLearnerMaxLabels();
+  // Suggest defaults: slow = 40% of max, fast = 70% of max
+  const slowInp = document.getElementById('slowThresholdInput');
+  const fastInp = document.getElementById('fastThresholdInput');
+  if (slowInp && fastInp) {
+    slowInp.value = Math.round(maxMarks * 0.4);
+    fastInp.value = Math.round(maxMarks * 0.7);
+  }
+  updateLearnersCategorization();
 }
 
 async function updateLearnersCategorization(overrideDirect) {
@@ -616,12 +653,12 @@ async function updateLearnersCategorization(overrideDirect) {
   currentComputedDirect = directData;
 
   const target = document.getElementById('learnerTargetSelect') ? document.getElementById('learnerTargetSelect').value : 'overall';
-  const slowThreshold = parseFloat(document.getElementById('slowThresholdInput') ? document.getElementById('slowThresholdInput').value : 50) || 50;
-  const fastThreshold = parseFloat(document.getElementById('fastThresholdInput') ? document.getElementById('fastThresholdInput').value : 70) || 70;
+  const slowMarks = parseFloat(document.getElementById('slowThresholdInput') ? document.getElementById('slowThresholdInput').value : 12) || 12;
+  const fastMarks = parseFloat(document.getElementById('fastThresholdInput') ? document.getElementById('fastThresholdInput').value : 21) || 21;
 
   // Update label indicators
-  if (document.getElementById('lblSlowThresh')) document.getElementById('lblSlowThresh').textContent = slowThreshold;
-  if (document.getElementById('lblFastThresh')) document.getElementById('lblFastThresh').textContent = fastThreshold;
+  if (document.getElementById('lblSlowThresh')) document.getElementById('lblSlowThresh').textContent = slowMarks;
+  if (document.getElementById('lblFastThresh')) document.getElementById('lblFastThresh').textContent = fastMarks;
 
   try {
     const res = await fetch('/api/categorize-learners', {
@@ -629,8 +666,9 @@ async function updateLearnersCategorization(overrideDirect) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         target_assessment: target,
-        slow_threshold_pct: slowThreshold,
-        fast_threshold_pct: fastThreshold,
+        threshold_mode: 'marks',
+        slow_threshold_marks: slowMarks,
+        fast_threshold_marks: fastMarks,
         direct_computed: directData
       })
     });
@@ -656,36 +694,47 @@ function renderLearnersTables(data) {
   if (document.getElementById('fastLearnerPct')) document.getElementById('fastLearnerPct').textContent = `${data.fast_pct}% of cohort`;
   if (document.getElementById('badgeFastTotal')) document.getElementById('badgeFastTotal').textContent = `${data.fast_count} Students`;
 
-  // Render Slow Learners Table
+  if (data.slow_threshold_marks !== undefined && document.getElementById('lblSlowThresh')) {
+    document.getElementById('lblSlowThresh').textContent = data.slow_threshold_marks;
+  }
+  if (data.fast_threshold_marks !== undefined && document.getElementById('lblFastThresh')) {
+    document.getElementById('lblFastThresh').textContent = data.fast_threshold_marks;
+  }
+
+  // Render Slow Learners Table (Roll No, Name, Marks Obtained, Out Of)
   const slowTbody = document.getElementById('slowLearnersTable') ? document.getElementById('slowLearnersTable').querySelector('tbody') : null;
   if (slowTbody) {
     slowTbody.innerHTML = '';
     if (!data.slow_learners || data.slow_learners.length === 0) {
-      slowTbody.innerHTML = '<tr><td colspan="2" class="text-center text-muted" style="padding: 16px;">No slow learners identified under this criteria.</td></tr>';
+      slowTbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted" style="padding: 16px;">No slow learners identified under this criteria.</td></tr>';
     } else {
       data.slow_learners.forEach(s => {
         const tr = document.createElement('tr');
         tr.innerHTML = `
           <td class="bold" style="color: #991b1b;">${s.roll_no}</td>
           <td>${s.name}</td>
+          <td style="text-align: center; font-weight: 700; color: #991b1b;">${s.marks_obtained !== undefined ? s.marks_obtained : '-'}</td>
+          <td style="text-align: center; color: #64748b;">${s.max_marks !== undefined ? s.max_marks : '-'}</td>
         `;
         slowTbody.appendChild(tr);
       });
     }
   }
 
-  // Render Fast Learners Table
+  // Render Fast Learners Table (Roll No, Name, Marks Obtained, Out Of)
   const fastTbody = document.getElementById('fastLearnersTable') ? document.getElementById('fastLearnersTable').querySelector('tbody') : null;
   if (fastTbody) {
     fastTbody.innerHTML = '';
     if (!data.fast_learners || data.fast_learners.length === 0) {
-      fastTbody.innerHTML = '<tr><td colspan="2" class="text-center text-muted" style="padding: 16px;">No fast learners identified under this criteria.</td></tr>';
+      fastTbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted" style="padding: 16px;">No fast learners identified under this criteria.</td></tr>';
     } else {
       data.fast_learners.forEach(s => {
         const tr = document.createElement('tr');
         tr.innerHTML = `
           <td class="bold" style="color: #166534;">${s.roll_no}</td>
           <td>${s.name}</td>
+          <td style="text-align: center; font-weight: 700; color: #166534;">${s.marks_obtained !== undefined ? s.marks_obtained : '-'}</td>
+          <td style="text-align: center; color: #64748b;">${s.max_marks !== undefined ? s.max_marks : '-'}</td>
         `;
         fastTbody.appendChild(tr);
       });

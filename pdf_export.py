@@ -70,7 +70,7 @@ def build_institution_header(styles) -> List[Any]:
 
 
 def build_two_line_teacher_box(teacher: Dict[str, Any], overall_att: str, overall_lvl: str, normal_cell) -> Table:
-    """Renders teacher and course info in a compact, elegant 2-line box."""
+    """Renders teacher and course info in an elegant, medium-sized box."""
     f_name = teacher.get('faculty_name', 'N/A') or 'N/A'
     subj = teacher.get('subject', 'N/A') or 'N/A'
     cls_name = teacher.get('class_name', 'N/A') or 'N/A'
@@ -78,9 +78,20 @@ def build_two_line_teacher_box(teacher: Dict[str, Any], overall_att: str, overal
     ay = teacher.get('academic_year', 'N/A') or 'N/A'
     sem = teacher.get('semester', 'N/A') or 'N/A'
 
-    cls_div = f"{cls_name} - Div {div_name}" if div_name and div_name != 'N/A' else cls_name
-    line1 = f"<b>Faculty Name:</b> {f_name} &nbsp;&nbsp;|&nbsp;&nbsp; <b>Subject:</b> {subj} &nbsp;&nbsp;|&nbsp;&nbsp; <b>Class:</b> {cls_div}"
-    line2 = f"<b>Academic Year:</b> {ay} &nbsp;&nbsp;|&nbsp;&nbsp; <b>Semester:</b> {sem} &nbsp;&nbsp;|&nbsp;&nbsp; <b>Overall Attainment:</b> {overall_att} / 3.00 &bull; {overall_lvl}"
+    cls_div = f"{cls_name} (Div {div_name})" if div_name and div_name != 'N/A' else cls_name
+
+    # Check overall attainment display format
+    if overall_att in ['Evaluated', 'N/A', 'Active', 'None', '']:
+        att_display = overall_att if overall_att in ['Evaluated', 'Active'] else 'Under Evaluation'
+    else:
+        try:
+            val_f = float(overall_att)
+            att_display = f"{val_f:.2f} / 3.00 &bull; {overall_lvl}"
+        except (ValueError, TypeError):
+            att_display = f"{overall_att} &bull; {overall_lvl}"
+
+    line1 = f"<b>Faculty:</b> {f_name} &nbsp;&nbsp;|&nbsp;&nbsp; <b>Course:</b> {subj} &nbsp;&nbsp;|&nbsp;&nbsp; <b>Class:</b> {cls_div}"
+    line2 = f"<b>Academic Year:</b> {ay} &nbsp;&nbsp;|&nbsp;&nbsp; <b>Semester:</b> {sem} &nbsp;&nbsp;|&nbsp;&nbsp; <b>Overall Attainment:</b> <font color='#1E3A8A'><b>{att_display}</b></font>"
 
     t_data = [
         [Paragraph(line1, normal_cell)],
@@ -89,11 +100,11 @@ def build_two_line_teacher_box(teacher: Dict[str, Any], overall_att: str, overal
     t_box = Table(t_data, colWidths=[540])
     t_box.setStyle(TableStyle([
         ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor('#F8FAFC')),
-        ('BOX', (0, 0), (-1, -1), 0.75, colors.HexColor('#CBD5E1')),
-        ('TOPPADDING', (0, 0), (-1, -1), 4),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
-        ('LEFTPADDING', (0, 0), (-1, -1), 10),
-        ('RIGHTPADDING', (0, 0), (-1, -1), 10),
+        ('BOX', (0, 0), (-1, -1), 0.75, colors.HexColor('#94A3B8')),
+        ('TOPPADDING', (0, 0), (-1, -1), 5),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 5),
+        ('LEFTPADDING', (0, 0), (-1, -1), 12),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 12),
     ]))
     return t_box
 
@@ -723,18 +734,24 @@ def create_slow_fast_learners_pdf(report_data: Dict[str, Any], learners_data: Di
 
     # 4. Identification Thresholds Banner
     target_ass = learners_data.get('target_assessment', 'Overall Evaluation')
-    slow_th = learners_data.get('slow_threshold_pct', 50.0)
-    fast_th = learners_data.get('fast_threshold_pct', 70.0)
+    slow_th_pct = learners_data.get('slow_threshold_pct', 50.0)
+    fast_th_pct = learners_data.get('fast_threshold_pct', 70.0)
+    slow_th_m = learners_data.get('slow_threshold_marks')
+    fast_th_m = learners_data.get('fast_threshold_marks')
+    max_m = learners_data.get('target_max_marks', 100.0)
     tot_eval = learners_data.get('total_evaluated', 0)
     fast_cnt = learners_data.get('fast_count', 0)
     fast_pct = learners_data.get('fast_pct', 0.0)
     slow_cnt = learners_data.get('slow_count', 0)
     slow_pct = learners_data.get('slow_pct', 0.0)
 
+    fast_crit_str = f"&ge; {fast_th_m} / {max_m} ({fast_th_pct}%)" if fast_th_m is not None else f"&ge; {fast_th_pct}%"
+    slow_crit_str = f"&lt; {slow_th_m} / {max_m} ({slow_th_pct}%)" if slow_th_m is not None else f"&lt; {slow_th_pct}%"
+
     criteria_html = (
-        f"<b>Categorization Criteria:</b> {target_ass} &nbsp;&nbsp;|&nbsp;&nbsp; "
-        f"<b>Fast Learner Threshold:</b> &ge; {fast_th}% &nbsp;&nbsp;|&nbsp;&nbsp; "
-        f"<b>Slow Learner Threshold:</b> &lt; {slow_th}%<br/>"
+        f"<b>Categorization Assessment:</b> {target_ass} &nbsp;&nbsp;|&nbsp;&nbsp; "
+        f"<b>Fast Learner Threshold:</b> {fast_crit_str} &nbsp;&nbsp;|&nbsp;&nbsp; "
+        f"<b>Slow Learner Threshold:</b> {slow_crit_str}<br/>"
         f"<b>Total Evaluated:</b> {tot_eval} &nbsp;&nbsp;|&nbsp;&nbsp; "
         f"<b>Identified Fast Learners:</b> {fast_cnt} &bull; {fast_pct}% &nbsp;&nbsp;|&nbsp;&nbsp; "
         f"<b>Identified Slow Learners:</b> {slow_cnt} &bull; {slow_pct}%"
@@ -753,11 +770,13 @@ def create_slow_fast_learners_pdf(report_data: Dict[str, Any], learners_data: Di
 
     # 5. Table 1: Fast Learners List
     fast_learners = learners_data.get('fast_learners', [])
-    elements.append(Paragraph(f"1. Identified Fast Learners (Score &ge; {fast_th}%) - Total: {len(fast_learners)} Students", h2_style))
+    elements.append(Paragraph(f"1. Identified Fast Learners (Marks {fast_crit_str}) - Total: {len(fast_learners)} Students", h2_style))
     f_headers = [
         Paragraph("Sr.", header_cell),
         Paragraph("Roll No", header_cell),
         Paragraph("Student Name", header_cell),
+        Paragraph("Marks Obtained", header_cell),
+        Paragraph("Out Of", header_cell),
     ]
     f_rows = [f_headers]
     if fast_learners:
@@ -766,16 +785,19 @@ def create_slow_fast_learners_pdf(report_data: Dict[str, Any], learners_data: Di
                 Paragraph(str(idx), normal_cell),
                 Paragraph(str(fl.get('roll_no')), bold_cell),
                 Paragraph(str(fl.get('name')), normal_cell),
+                Paragraph(str(fl.get('marks_obtained', '-')), bold_cell),
+                Paragraph(str(fl.get('max_marks', '-')), normal_cell),
             ])
     else:
-        f_rows.append([Paragraph("No students met the Fast Learner criteria.", normal_cell), Paragraph("-", normal_cell), Paragraph("-", normal_cell)])
+        f_rows.append([Paragraph("No students met the Fast Learner criteria.", normal_cell), Paragraph("-", normal_cell), Paragraph("-", normal_cell), Paragraph("-", normal_cell), Paragraph("-", normal_cell)])
 
-    f_table = Table(f_rows, colWidths=[0.6*inch, 2.4*inch, 4.5*inch])
+    f_table = Table(f_rows, colWidths=[0.5*inch, 1.3*inch, 3.5*inch, 1.1*inch, 1.1*inch])
     f_table.setStyle(TableStyle([
         ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#166534')),
         ('GRID', (0, 0), (-1, -1), 0.3, colors.HexColor('#CBD5E1')),
         ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#F0FDF4')]),
         ('ALIGN', (0, 0), (0, -1), 'CENTER'),
+        ('ALIGN', (3, 0), (4, -1), 'CENTER'),
         ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
         ('TOPPADDING', (0, 0), (-1, -1), 2.5),
         ('BOTTOMPADDING', (0, 0), (-1, -1), 2.5),
@@ -785,11 +807,13 @@ def create_slow_fast_learners_pdf(report_data: Dict[str, Any], learners_data: Di
 
     # 6. Table 2: Slow Learners List
     slow_learners = learners_data.get('slow_learners', [])
-    elements.append(Paragraph(f"2. Identified Slow Learners (Score &lt; {slow_th}%) - Total: {len(slow_learners)} Students", h2_style))
+    elements.append(Paragraph(f"2. Identified Slow Learners (Marks {slow_crit_str}) - Total: {len(slow_learners)} Students", h2_style))
     s_headers = [
         Paragraph("Sr.", header_cell),
         Paragraph("Roll No", header_cell),
         Paragraph("Student Name", header_cell),
+        Paragraph("Marks Obtained", header_cell),
+        Paragraph("Out Of", header_cell),
     ]
     s_rows = [s_headers]
     if slow_learners:
@@ -798,16 +822,19 @@ def create_slow_fast_learners_pdf(report_data: Dict[str, Any], learners_data: Di
                 Paragraph(str(idx), normal_cell),
                 Paragraph(str(sl.get('roll_no')), bold_cell),
                 Paragraph(str(sl.get('name')), normal_cell),
+                Paragraph(str(sl.get('marks_obtained', '-')), bold_cell),
+                Paragraph(str(sl.get('max_marks', '-')), normal_cell),
             ])
     else:
-        s_rows.append([Paragraph("No students met the Slow Learner criteria.", normal_cell), Paragraph("-", normal_cell), Paragraph("-", normal_cell)])
+        s_rows.append([Paragraph("No students met the Slow Learner criteria.", normal_cell), Paragraph("-", normal_cell), Paragraph("-", normal_cell), Paragraph("-", normal_cell), Paragraph("-", normal_cell)])
 
-    s_table = Table(s_rows, colWidths=[0.6*inch, 2.4*inch, 4.5*inch])
+    s_table = Table(s_rows, colWidths=[0.5*inch, 1.3*inch, 3.5*inch, 1.1*inch, 1.1*inch])
     s_table.setStyle(TableStyle([
         ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#991B1B')),
         ('GRID', (0, 0), (-1, -1), 0.3, colors.HexColor('#CBD5E1')),
         ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#FEF2F2')]),
         ('ALIGN', (0, 0), (0, -1), 'CENTER'),
+        ('ALIGN', (3, 0), (4, -1), 'CENTER'),
         ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
         ('TOPPADDING', (0, 0), (-1, -1), 2.5),
         ('BOTTOMPADDING', (0, 0), (-1, -1), 2.5),
