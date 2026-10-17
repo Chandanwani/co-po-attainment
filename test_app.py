@@ -535,6 +535,11 @@ def test_practical_course_workflow():
         assert sess['teacher']['course_type'] == 'practical'
         assert sess['teacher']['batch'] == 'Batch 2'
 
+    # Verify navigating to /assessment redirects to /practical-assessment when course_type == 'practical'
+    res_redir = client.get('/assessment')
+    assert res_redir.status_code == 302
+    assert '/practical-assessment' in res_redir.location
+
     # 2. Build 10 experiments (2 per CO) and PR/OR exam
     col_configs = [
         {'name': 'Exp 1', 'max_marks': 25, 'mapped_cos': ['CO1'], 'checked': True},

@@ -727,7 +727,7 @@ async function calculateDirectAttainment() {
     
     // Auto sync state for serverless persistence across pages
     if (typeof saveStoredState === 'function') {
-      saveStoredState({ direct: { data: result.data } });
+      saveStoredState({ direct: result.data });
     }
     if (typeof syncStateToBackend === 'function') {
       syncStateToBackend();
@@ -737,10 +737,8 @@ async function calculateDirectAttainment() {
       document.getElementById('directResultsSection').scrollIntoView({ behavior: 'smooth', block: 'start' });
     }, 100);
 
-    // If indirect already present, re-calculate combined
-    if (currentIndirectRaw) {
-      calculateWeightedAttainment();
-    }
+    // Compute and display overall weighted course attainment immediately
+    calculateWeightedAttainment();
   } catch (err) {
     showDirectError('Calculation error: ' + err.message);
   }
@@ -958,20 +956,69 @@ async function sendIndirectParseRequest(formData) {
       showIndirectError(result.message || 'Error parsing indirect survey.');
       return;
     }
-    currentIndirectRaw = result;
-    displayIndirectResults(result.data);
-    showIndirectSuccess(`Indirect exit survey processed: ${result.data.total_responses} student responses for ${result.data.co_summaries.length} COs.`);
-    calculateWeightedAttainment();
+
+    const detectedCOs = result.detected_cos || [];
+    if (detectedCOs.length === 0) {
+      showIndirectError('No Course Outcome columns detected in indirect survey (expected headers like CO1, CO2, etc.).');
+      return;
+    }
+
+    const ratingScale = parseFloat(document.getElementById('ratingScaleSelect')?.value) || 10.0;
+    const compRes = await fetch('/api/compute-indirect', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        ratings_data: result.ratings_data,
+        max_rating: ratingScale,
+        co_columns_override: detectedCOs,
+        mapping_target: 'CO'
+      })
+    });
+    const compResult = await compRes.json();
+    if (!compResult.success) {
+      const errList = compResult.errors || [compResult.message || 'Indirect survey validation error.'];
+      showIndirectError('Indirect Survey Validation Errors:\n• ' + errList.join('\n• '));
+      return;
+    }
+
+    currentIndirectRaw = compResult.data;
+    displayIndirectResults(compResult.data);
+    if (typeof saveStoredState === 'function') {
+      saveStoredState({ indirect: compResult.data });
+    }
+    if (typeof syncStateToBackend === 'function') {
+      syncStateToBackend();
+    }
+    showIndirectSuccess(`✓ Indirect exit survey processed: ${compResult.data.total_responses} student responses for ${compResult.data.co_summaries.length} COs.`);
+    await calculateWeightedAttainment();
   } catch (err) {
     showIndirectError('Upload failed: ' + err.message);
   }
 }
 
 function displayIndirectResults(data) {
-  document.getElementById('indirectResultsSection').style.display = 'block';
-  document.getElementById('statIndirectResponses').textContent = data.total_responses;
-  document.getElementById('statIndirectAvgRating').textContent = `${data.overall_avg_rating} / ${data.rating_scale}`;
-  document.getElementById('statIndirectAttainment').textContent = `${data.overall_attainment} / 3.00`;
+  if (!data) return;
+  const indSec = document.getElementById('indirectResultsSection');
+  if (indSec) indSec.style.display = 'block';
+
+  const totalResp = data.total_responses ?? (data.student_ratings ? data.student_ratings.length : 0);
+  document.getElementById('statIndirectResponses').textContent = totalResp;
+
+  const ratingScale = data.rating_scale || document.getElementById('ratingScaleSelect')?.value || 10;
+  let avgRating = data.overall_avg_rating;
+  let avgAtt = data.overall_attainment;
+
+  if ((avgRating === undefined || avgRating === null) && data.co_summaries && data.co_summaries.length > 0) {
+    const totalR = data.co_summaries.reduce((sum, c) => sum + (parseFloat(c.average_rating) || 0), 0);
+    avgRating = (totalR / data.co_summaries.length).toFixed(2);
+  }
+  if ((avgAtt === undefined || avgAtt === null) && data.co_summaries && data.co_summaries.length > 0) {
+    const totalA = data.co_summaries.reduce((sum, c) => sum + (parseFloat(c.attainment) || 0), 0);
+    avgAtt = (totalA / data.co_summaries.length).toFixed(2);
+  }
+
+  document.getElementById('statIndirectAvgRating').textContent = `${avgRating ?? 0} / ${ratingScale}`;
+  document.getElementById('statIndirectAttainment').textContent = `${avgAtt ?? 0} / 3.00`;
 
   const tbody = document.getElementById('indirectCOSummaryTable').querySelector('tbody');
   tbody.innerHTML = '';
@@ -979,10 +1026,10 @@ function displayIndirectResults(data) {
     const tr = document.createElement('tr');
     tr.innerHTML = `
       <td><strong>${co.co}</strong></td>
-      <td>${co.average_rating} / ${data.rating_scale}</td>
+      <td>${co.average_rating} / ${ratingScale}</td>
       <td>${co.rating_percentage}%</td>
       <td style="font-weight: 700; color: var(--accent);">${co.attainment}</td>
-      <td>${getBadgeHtml(co.level_label)}</td>
+      <td>${getBadgeHtml(co.level_label || co.level)}</td>
     `;
     tbody.appendChild(tr);
   });
@@ -1023,7 +1070,7 @@ function displayWeightedResults(data) {
 
   // Save to stored state for persistence
   if (typeof saveStoredState === 'function') {
-    saveStoredState({ weighted: { data: data } });
+    saveStoredState({ weighted: data });
   }
   if (typeof syncStateToBackend === 'function') {
     syncStateToBackend();
@@ -1149,6 +1196,62 @@ function proceedPage2PdfDownload() {
   }
 }
 
-window.addEventListener('DOMContentLoaded', () => {
+// Auto-restore previous calculations when navigating back to Practical Assessment
+window.addEventListener('DOMContentLoaded', async () => {
   renderScratchExpCOList();
+
+  try {
+    const res = await fetch('/api/get-full-state');
+    let state = await res.json();
+    const stored = (typeof getStoredState === 'function') ? getStoredState() : {};
+
+    let directData = state.direct;
+    if ((!directData || !directData.co_summaries || directData.co_summaries.length === 0) && stored.direct) {
+      directData = stored.direct.co_summaries ? stored.direct : (stored.direct.data || stored.direct);
+    }
+
+    let indirectData = state.indirect;
+    if ((!indirectData || !indirectData.co_summaries || indirectData.co_summaries.length === 0) && stored.indirect) {
+      indirectData = stored.indirect.co_summaries ? stored.indirect : (stored.indirect.data || stored.indirect);
+    }
+
+    let weightedData = state.weighted;
+    if ((!weightedData || (!weightedData.combined_results && !weightedData.co_attainments)) && stored.weighted) {
+      weightedData = (stored.weighted.combined_results || stored.weighted.co_attainments) ? stored.weighted : (stored.weighted.data || stored.weighted);
+    }
+
+    // Sync state to backend if present in storage but missing on backend
+    if ((!state.direct && directData) || (!state.indirect && indirectData) || (!state.weighted && weightedData)) {
+      if (typeof syncStateToBackend === 'function') {
+        syncStateToBackend(stored);
+      }
+    }
+
+    if (directData && directData.co_summaries && directData.co_summaries.length > 0) {
+      currentDirectRaw = directData;
+      displayDirectResults(directData);
+      const resSec = document.getElementById('directResultsSection');
+      if (resSec) resSec.style.display = 'block';
+      const btnGo = document.getElementById('btnGoToStep3');
+      if (btnGo) btnGo.style.display = 'inline-flex';
+      const btnPdf = document.getElementById('btnPage2PdfTop');
+      if (btnPdf) btnPdf.style.display = 'inline-flex';
+      const nextBar = document.getElementById('directNextActionBar');
+      if (nextBar) nextBar.style.display = 'flex';
+    }
+
+    if (indirectData && indirectData.co_summaries && indirectData.co_summaries.length > 0) {
+      currentIndirectRaw = indirectData;
+      displayIndirectResults(indirectData);
+    }
+
+    if (weightedData && (weightedData.combined_results || weightedData.co_attainments)) {
+      displayWeightedResults(weightedData);
+    } else if (directData && directData.co_summaries && directData.co_summaries.length > 0) {
+      // Direct exists but weighted was not cached, auto-compute it
+      calculateWeightedAttainment();
+    }
+  } catch (err) {
+    console.warn('Could not restore practical evaluation state:', err);
+  }
 });

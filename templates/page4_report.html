@@ -132,7 +132,7 @@
     <p style="font-size: 14px; color: var(--text-muted); max-width: 520px; margin: 8px auto 20px auto;">
       You have not uploaded any student assessment marks yet. Please upload your student marks in Step 2 to generate CO-PO attainment calculations and graphs.
     </p>
-    <a href="{{ url_for('page2_assessment') }}" class="btn btn-primary btn-lg">
+    <a href="{{ url_for('page2_practical') if teacher and teacher.course_type == 'practical' else url_for('page2_assessment') }}" class="btn btn-primary btn-lg">
       &rarr; Go to Step 2: Upload Assessment Marks
     </a>
   </div>

@@ -225,6 +225,8 @@ def page2_assessment():
     if not teacher.get('faculty_name') and 'teacher' in session:
         teacher = session['teacher']
         TEMP_DATA_STORE[sid]['teacher'] = teacher
+    if teacher.get('course_type') == 'practical':
+        return redirect(url_for('page2_practical'))
     return render_template('page2_assessment.html', teacher=teacher, page_step=2)
 
 
@@ -236,6 +238,8 @@ def page2_practical():
     if not teacher.get('faculty_name') and 'teacher' in session:
         teacher = session['teacher']
         TEMP_DATA_STORE[sid]['teacher'] = teacher
+    if teacher.get('course_type') and teacher.get('course_type') != 'practical':
+        return redirect(url_for('page2_assessment'))
     return render_template('page2_practical.html', teacher=teacher, page_step=2)
 
 
