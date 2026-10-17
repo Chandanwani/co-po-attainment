@@ -671,6 +671,47 @@ def test_practicle_column_parsing_and_mapping():
     assert len(comp_json['data']['co_summaries']) >= 2
 
 
+def test_sample_practical_marks_50_xlsx_upload():
+    """Verify that sample_practical_marks_50.xlsx downloads properly, parses 15 students and Exp 1-5, and sets max marks 50."""
+    client = app.test_client()
+
+    # 1. Test sample download route
+    res_dl = client.get('/sample-data/sample_practical_marks_50.xlsx')
+    assert res_dl.status_code == 200
+    assert len(res_dl.data) > 1000
+
+    # 2. Test upload and parse
+    res_up = client.post('/api/upload-direct', data={'file': (io.BytesIO(res_dl.data), 'sample_practical_marks_50.xlsx')})
+    assert res_up.status_code == 200
+    data = res_up.get_json()
+    assert data['success'] is True
+    assert len(data['students']) == 15
+    assert len(data['column_configs']) == 5
+
+    names = [c['name'] for c in data['column_configs']]
+    assert names == ['Exp 1', 'Exp 2', 'Exp 3', 'Exp 4', 'Exp 5']
+
+    for c in data['column_configs']:
+        assert c['max_marks'] == 50.0
+
+    assert data['column_configs'][0]['mapped_cos'] == ['CO1']
+    assert data['column_configs'][1]['mapped_cos'] == ['CO1']
+    assert data['column_configs'][2]['mapped_cos'] == ['CO2']
+    assert data['column_configs'][3]['mapped_cos'] == ['CO2']
+    assert data['column_configs'][4]['mapped_cos'] == ['CO3']
+
+    # 3. Test calculation
+    res_comp = client.post('/api/compute-direct', json={
+        'students': data['students'],
+        'column_configs': data['column_configs'],
+        'passing_threshold_ratio': 0.50
+    })
+    assert res_comp.status_code == 200
+    comp_json = res_comp.get_json()
+    assert comp_json['success'] is True
+    assert len(comp_json['data']['co_summaries']) == 3
+
+
 if __name__ == '__main__':
     test_gapc_attainment_formula()
     print("[PASS] test_gapc_attainment_formula")
@@ -706,4 +747,6 @@ if __name__ == '__main__':
     print("[PASS] test_practical_course_workflow")
     test_practicle_column_parsing_and_mapping()
     print("[PASS] test_practicle_column_parsing_and_mapping")
-    print("\nALL 17 TEST SUITES PASSED SUCCESSFULLY!")
+    test_sample_practical_marks_50_xlsx_upload()
+    print("[PASS] test_sample_practical_marks_50_xlsx_upload")
+    print("\nALL 18 TEST SUITES PASSED SUCCESSFULLY!")

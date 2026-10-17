@@ -302,21 +302,36 @@ function toggleColumnCheck(idx) {
   const maxInp = document.getElementById(`maxMarks_${idx}`);
   const coInp = document.getElementById(`mappedCOs_${idx}`);
 
-  if (chk.checked) {
+  const isChecked = chk ? chk.checked : true;
+
+  if (currentDirectRaw && currentDirectRaw.column_configs && currentDirectRaw.column_configs[idx]) {
+    currentDirectRaw.column_configs[idx].checked = isChecked;
+  }
+
+  if (isChecked) {
     card.classList.remove('excluded');
     badge.textContent = 'Included';
     badge.style.background = '#dcfce7';
     badge.style.color = '#166534';
-    maxInp.disabled = false;
-    coInp.disabled = false;
+    if (maxInp) maxInp.disabled = false;
+    if (coInp) coInp.disabled = false;
   } else {
     card.classList.add('excluded');
     badge.textContent = 'Excluded';
     badge.style.background = '#fee2e2';
     badge.style.color = '#991b1b';
-    maxInp.disabled = true;
-    coInp.disabled = true;
+    if (maxInp) maxInp.disabled = true;
+    if (coInp) coInp.disabled = true;
   }
+
+  // Instantly hide or show column in the marks table
+  const th = document.getElementById(`thCol_${idx}`);
+  if (th) th.style.display = isChecked ? '' : 'none';
+
+  const cells = document.querySelectorAll(`.cell-col-${idx}`);
+  cells.forEach(td => {
+    td.style.display = isChecked ? '' : 'none';
+  });
 }
 
 function renderDirectTable(students, configs) {
@@ -326,8 +341,9 @@ function renderDirectTable(students, configs) {
   const tbody = table.querySelector('tbody');
 
   let thHtml = '<tr><th style="width: 50px;">#</th><th style="width: 100px;">Roll No</th><th>Student Name</th>';
-  configs.forEach(c => {
-    thHtml += `<th>${c.name}</th>`;
+  configs.forEach((c, idx) => {
+    const isVisible = (c.checked !== false);
+    thHtml += `<th id="thCol_${idx}" style="${isVisible ? '' : 'display: none;'}">${c.name}</th>`;
   });
   thHtml += '<th style="width: 50px;">Action</th></tr>';
   thead.innerHTML = thHtml;
@@ -342,13 +358,14 @@ function renderDirectTable(students, configs) {
       <td><input type="text" class="cell-input" data-field="roll" value="${s.roll_no || ''}"></td>
       <td><input type="text" class="cell-input" data-field="name" value="${s.name || ''}"></td>
     `;
-    configs.forEach(c => {
+    configs.forEach((c, idx) => {
+      const isVisible = (c.checked !== false);
       const val = s.marks ? (s.marks[c.name] ?? '') : '';
       const numVal = parseFloat(val);
       const isNeg = !isNaN(numVal) && numVal < 0;
       if (isNeg) hasNegative = true;
       const cellStyle = isNeg ? 'style="background-color: #fee2e2; border-color: #ef4444; color: #991b1b; font-weight: 700;" title="Negative mark: please correct or click Auto-Fix"' : '';
-      trHtml += `<td><input type="number" step="0.01" class="cell-input" data-col="${c.name}" value="${val}" ${cellStyle} oninput="onCellMarkInput(this)"></td>`;
+      trHtml += `<td class="cell-col-${idx}" style="${isVisible ? '' : 'display: none;'}"><input type="number" step="0.01" class="cell-input" data-col="${c.name}" value="${val}" ${cellStyle} oninput="onCellMarkInput(this)"></td>`;
     });
     trHtml += `<td class="text-center"><button type="button" class="btn btn-outline btn-sm" style="color:#ef4444;padding:2px 6px;" onclick="removeDirectRow(${rIdx})">&times;</button></td>`;
     tr.innerHTML = trHtml;
@@ -416,8 +433,9 @@ function addDirectRow() {
     <td><input type="text" class="cell-input" data-field="roll" value="S${rIdx + 1}"></td>
     <td><input type="text" class="cell-input" data-field="name" value="Student ${rIdx + 1}"></td>
   `;
-  currentDirectRaw.column_configs.forEach(c => {
-    trHtml += `<td><input type="number" step="0.01" class="cell-input" data-col="${c.name}" value="0"></td>`;
+  currentDirectRaw.column_configs.forEach((c, idx) => {
+    const isVisible = (c.checked !== false);
+    trHtml += `<td class="cell-col-${idx}" style="${isVisible ? '' : 'display: none;'}"><input type="number" step="0.01" class="cell-input" data-col="${c.name}" value="0"></td>`;
   });
   trHtml += `<td class="text-center"><button type="button" class="btn btn-outline btn-sm" style="color:#ef4444;padding:2px 6px;" onclick="removeDirectRow(${rIdx})">&times;</button></td>`;
   tr.innerHTML = trHtml;
