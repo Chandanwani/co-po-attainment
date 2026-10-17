@@ -58,50 +58,63 @@
       </div>
     </div>
 
-    <!-- Upload & Scratch Tabs -->
+    <!-- Upload & Scratch Tabs: Upload First, then Create, then Paste -->
     <div class="tabs">
-      <button type="button" class="tab-btn active" onclick="switchDirectTab('scratch')">✨ Create Blank Lab Sheet from Scratch</button>
-      <button type="button" class="tab-btn" onclick="switchDirectTab('file')">Upload File (CSV, TSV, XLSX)</button>
+      <button type="button" class="tab-btn active" onclick="switchDirectTab('file')">Upload File (CSV, TSV, XLSX)</button>
+      <button type="button" class="tab-btn" onclick="switchDirectTab('scratch')">✨ Create Blank Lab Sheet from Scratch</button>
       <button type="button" class="tab-btn" onclick="switchDirectTab('paste')">Paste Spreadsheet Data</button>
     </div>
 
-    <!-- Tab 1: Scratch Sheet Builder -->
-    <div id="directScratchTab" class="tab-content active">
+    <!-- Tab 1: File Upload (First & Active by Default) -->
+    <div id="directFileTab" class="tab-content active">
+      <div style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap;">
+        <input type="file" id="directFileInput" accept=".csv, .tsv, .txt, .xlsx, .xls" class="form-control" style="max-width: 360px;" onchange="handleFileSelected('directFileInput', 'directFileBadge')">
+        <div id="directFileBadge" class="file-chosen-badge" style="display: none;">
+          <span id="directFileBadgeName" class="file-name-text"></span>
+          <button type="button" class="btn-clear-file" onclick="clearFileSelection('directFileInput', 'directFileBadge', 'directErrorAlert')" title="Remove selected file">&times;</button>
+        </div>
+        <button type="button" class="btn btn-primary" onclick="uploadDirectFile()">Parse Practical Marks File</button>
+        <span style="font-size: 12px; color: var(--text-muted);">Max file size: 16MB</span>
+      </div>
+      <p style="font-size: 12px; color: var(--text-muted); margin-top: 8px;">
+        After parsing, you can review and select the exact CO mapping for every experiment column before calculating.
+      </p>
+    </div>
+
+    <!-- Tab 2: Scratch Sheet Builder (User selected COs & User added Roll Numbers) -->
+    <div id="directScratchTab" class="tab-content">
       <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 16px; margin-bottom: 12px;">
         <h3 style="font-size: 14.5px; font-weight: 700; color: var(--primary); margin-bottom: 4px;">
           🛠️ Configure Laboratory Sheet (Experiments &amp; Student List)
         </h3>
         <p style="font-size: 12.5px; color: var(--text-muted); margin-bottom: 14px;">
-          Define your practical experiments, max marks, and paste your student names and roll numbers. All marks start blank for you to enter directly in the table.
+          Define experiments, select which experiment maps to which CO, and enter student roll numbers. All marks start blank for you to enter directly in the table.
         </p>
 
-        <!-- Student Names & Roll Numbers -->
+        <!-- Student Roll Numbers & Names (Entered by User) -->
         <div class="form-group mb-12">
           <label class="form-label" style="font-weight: 700; font-size: 13px;">
-            Student Roll Numbers &amp; Names (Paste from Excel / Attendance Sheet):
+            Student Roll Numbers &amp; Names (Added by User):
           </label>
           <p style="font-size: 12px; color: var(--text-muted); margin-top: -4px; margin-bottom: 6px;">
-            Paste rows with Roll No and Student Name (one student per line, tab/comma separated). If left empty, student rows will be auto-numbered below.
+            Enter / paste student roll numbers (and optional names) one per line (e.g. <code>101 Aarav Sharma</code> or just roll numbers <code>101</code>).
           </p>
-          <textarea id="scratchStudentsInput" class="form-control" rows="4" placeholder="101&#9;Aarav Sharma&#10;102&#9;Ananya Patil&#10;103&#9;Rohan Kulkarni&#10;104&#9;Pooja Shinde"></textarea>
+          <textarea id="scratchStudentsInput" class="form-control" rows="4" placeholder="101&#9;Aarav Sharma&#10;102&#9;Ananya Patil&#10;103&#9;Rohan Kulkarni"></textarea>
         </div>
 
+        <div class="form-group mb-14">
+          <label style="font-size: 12.5px; font-weight: 600;">Or Number of Blank Student Rows (type Roll Numbers directly in table):</label>
+          <input type="number" id="scratchStudentCount" class="form-control" style="max-width: 220px;" value="15" min="1" max="250">
+          <small style="color: var(--text-muted); font-size: 11.5px; display: block; margin-top: 3px;">
+            If textarea is empty, blank rows will be added with empty roll number &amp; name boxes for you to fill in.
+          </small>
+        </div>
+
+        <!-- Experiments Count & Max Marks -->
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 14px;">
           <div>
-            <label style="font-size: 12.5px; font-weight: 600;">Or Number of Blank Student Rows (if not pasting):</label>
-            <input type="number" id="scratchStudentCount" class="form-control" value="20" min="1" max="250">
-          </div>
-          <div>
-            <label style="font-size: 12.5px; font-weight: 600;">Starting Roll Number:</label>
-            <input type="number" id="scratchStartRoll" class="form-control" value="101" min="1">
-          </div>
-        </div>
-
-        <!-- Experiments & CO Mapping -->
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
-          <div>
             <label style="font-size: 12.5px; font-weight: 600;">Number of Experiments:</label>
-            <input type="number" id="scratchExpCount" class="form-control" value="10" min="1" max="25">
+            <input type="number" id="scratchExpCount" class="form-control" value="10" min="1" max="25" oninput="renderScratchExpCOList()" onchange="renderScratchExpCOList()">
           </div>
           <div>
             <label style="font-size: 12.5px; font-weight: 600;">Default Max Marks per Experiment:</label>
@@ -109,13 +122,17 @@
           </div>
         </div>
 
-        <div class="form-group mb-12">
-          <label style="font-size: 12.5px; font-weight: 600;">Experiment to CO Mapping Pattern:</label>
-          <select id="scratchExpCOStrategy" class="form-control" style="font-size: 13px;">
-            <option value="2_per_co" selected>2 Experiments per CO (Exp 1-2 &rarr; CO1, Exp 3-4 &rarr; CO2, Exp 5-6 &rarr; CO3, Exp 7-8 &rarr; CO4, Exp 9-10 &rarr; CO5)</option>
-            <option value="1_per_co">1 Experiment per CO (Exp 1 &rarr; CO1, Exp 2 &rarr; CO2, Exp 3 &rarr; CO3...)</option>
-            <option value="all_cos">All Experiments map to All COs (CO1 to CO5)</option>
-          </select>
+        <!-- Direct CO Mapping per Experiment Selected by User -->
+        <div class="form-group mb-14">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+            <label style="font-size: 12.5px; font-weight: 700; color: var(--primary);">
+              Select CO Mapping for Each Experiment:
+            </label>
+            <span style="font-size: 11.5px; color: var(--text-muted);">(Select which CO each experiment belongs to)</span>
+          </div>
+          <div id="scratchExpCOGrid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 8px; background: #ffffff; border: 1px solid #cbd5e1; border-radius: 6px; padding: 10px;">
+            <!-- Rendered dynamically by practical.js based on scratchExpCount -->
+          </div>
         </div>
 
         <div style="background: #f1f5f9; border-radius: 6px; padding: 10px; margin-bottom: 16px;">
@@ -133,19 +150,6 @@
         <button type="button" class="btn btn-primary" onclick="buildPracticalSheetFromScratch()" style="background: #4f46e5; border-color: #4f46e5; font-weight: 700;">
           ✨ Generate Blank Practical Sheet
         </button>
-      </div>
-    </div>
-
-    <!-- Tab 2: File Upload -->
-    <div id="directFileTab" class="tab-content">
-      <div style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap;">
-        <input type="file" id="directFileInput" accept=".csv, .tsv, .txt, .xlsx, .xls" class="form-control" style="max-width: 360px;" onchange="handleFileSelected('directFileInput', 'directFileBadge')">
-        <div id="directFileBadge" class="file-chosen-badge" style="display: none;">
-          <span id="directFileBadgeName" class="file-name-text"></span>
-          <button type="button" class="btn-clear-file" onclick="clearFileSelection('directFileInput', 'directFileBadge', 'directErrorAlert')" title="Remove selected file">&times;</button>
-        </div>
-        <button type="button" class="btn btn-primary" onclick="uploadDirectFile()">Parse Practical Marks File</button>
-        <span style="font-size: 12px; color: var(--text-muted);">Max file size: 16MB</span>
       </div>
     </div>
 

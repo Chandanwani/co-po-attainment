@@ -132,26 +132,60 @@ async function sendDirectParseRequest(formData) {
 // SCRATCH LAB SHEET BUILDER (NO FILE REQUIRED)
 // =========================================================================
 
+// =========================================================================
+// SCRATCH LAB SHEET BUILDER (NO FILE REQUIRED)
+// =========================================================================
+
+function renderScratchExpCOList() {
+  const container = document.getElementById('scratchExpCOGrid');
+  if (!container) return;
+  const count = parseInt(document.getElementById('scratchExpCount').value) || 10;
+
+  const currentSelections = {};
+  for (let i = 1; i <= 35; i++) {
+    const el = document.getElementById(`scratchExpCO_${i}`);
+    if (el) currentSelections[i] = el.value;
+  }
+
+  container.innerHTML = '';
+  for (let i = 1; i <= count; i++) {
+    const chip = document.createElement('div');
+    chip.style.cssText = 'background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 6px; padding: 6px 8px; font-size: 12px; display: flex; align-items: center; justify-content: space-between; gap: 4px;';
+    
+    // Default suggestion for user convenience (e.g. 2 per CO)
+    const defaultCO = `CO${Math.min(5, Math.floor((i - 1) / 2) + 1)}`;
+    const selVal = currentSelections[i] || defaultCO;
+
+    chip.innerHTML = `
+      <strong style="color: #1e293b; white-space: nowrap;">Exp ${i}:</strong>
+      <select id="scratchExpCO_${i}" class="form-control" style="width: auto; padding: 2px 4px; font-size: 11.5px; height: 26px; font-weight: 700; color: #1e40af;">
+        <option value="CO1" ${selVal === 'CO1' ? 'selected' : ''}>CO1</option>
+        <option value="CO2" ${selVal === 'CO2' ? 'selected' : ''}>CO2</option>
+        <option value="CO3" ${selVal === 'CO3' ? 'selected' : ''}>CO3</option>
+        <option value="CO4" ${selVal === 'CO4' ? 'selected' : ''}>CO4</option>
+        <option value="CO5" ${selVal === 'CO5' ? 'selected' : ''}>CO5</option>
+        <option value="CO6" ${selVal === 'CO6' ? 'selected' : ''}>CO6</option>
+        <option value="CO1, CO2" ${selVal === 'CO1, CO2' ? 'selected' : ''}>CO1, CO2</option>
+        <option value="CO1, CO2, CO3, CO4, CO5" ${selVal.includes('CO1') && selVal.includes('CO5') ? 'selected' : ''}>All COs</option>
+      </select>
+    `;
+    container.appendChild(chip);
+  }
+}
+
 function buildPracticalSheetFromScratch() {
   hideDirectAlerts();
 
   const expCount = parseInt(document.getElementById('scratchExpCount').value) || 10;
   const expMax = parseFloat(document.getElementById('scratchExpMaxMarks').value) || 25;
-  const coStrat = document.getElementById('scratchExpCOStrategy') ? document.getElementById('scratchExpCOStrategy').value : '2_per_co';
 
-  // 1. Build Column Configs with Smart Multi-Experiment CO Mapping
+  // 1. Build Column Configs reading the user's selected CO for each experiment
   const configs = [];
   for (let i = 1; i <= expCount; i++) {
-    let mappedCOs = ['CO1'];
-    if (coStrat === '2_per_co') {
-      const coIdx = Math.min(5, Math.floor((i - 1) / 2) + 1);
-      mappedCOs = [`CO${coIdx}`];
-    } else if (coStrat === '1_per_co') {
-      const coIdx = Math.min(6, i);
-      mappedCOs = [`CO${coIdx}`];
-    } else {
-      mappedCOs = ['CO1', 'CO2', 'CO3', 'CO4', 'CO5'];
-    }
+    const selEl = document.getElementById(`scratchExpCO_${i}`);
+    const selVal = selEl ? selEl.value : `CO${Math.min(5, Math.floor((i - 1) / 2) + 1)}`;
+    const mappedCOs = selVal.split(',').map(s => s.trim().toUpperCase()).filter(Boolean);
+
     configs.push({
       name: `Exp ${i}`,
       max_marks: expMax,
@@ -172,33 +206,26 @@ function buildPracticalSheetFromScratch() {
     });
   }
 
-  // 2. Parse / Generate Student Rows (Roll No & Student Name)
+  // 2. Parse / Generate Student Rows (User-added Roll Numbers & Names)
   const pastedStudentsText = document.getElementById('scratchStudentsInput') ? document.getElementById('scratchStudentsInput').value.trim() : '';
   const students = [];
 
   if (pastedStudentsText) {
     const lines = pastedStudentsText.split('\n').map(l => l.trim()).filter(Boolean);
     lines.forEach((line, idx) => {
-      // Split by tab or comma or multiple spaces
       const parts = line.split(/\t|,|  +/).map(p => p.trim()).filter(Boolean);
-      let roll = `S${idx + 1}`;
+      let roll = '';
       let name = '';
       if (parts.length >= 2) {
         roll = parts[0];
         name = parts.slice(1).join(' ');
       } else if (parts.length === 1) {
-        // If single token is purely numeric or starts with roll prefix
-        if (/^\d+$/.test(parts[0])) {
-          roll = parts[0];
-          name = '';
-        } else {
-          name = parts[0];
-          roll = String(101 + idx);
-        }
+        roll = parts[0];
+        name = '';
       }
 
       const marks = {};
-      configs.forEach(c => { marks[c.name] = ''; }); // NO demo marks - completely blank!
+      configs.forEach(c => { marks[c.name] = ''; });
 
       students.push({
         roll_no: roll,
@@ -207,15 +234,14 @@ function buildPracticalSheetFromScratch() {
       });
     });
   } else {
-    // Generate by student count and starting roll
-    const studentCount = parseInt(document.getElementById('scratchStudentCount').value) || 20;
-    const startRoll = parseInt(document.getElementById('scratchStartRoll').value) || 101;
+    // Blank student rows without predefined roll numbers - user types them directly in table
+    const studentCount = parseInt(document.getElementById('scratchStudentCount').value) || 15;
     for (let s = 0; s < studentCount; s++) {
       const marks = {};
-      configs.forEach(c => { marks[c.name] = ''; }); // Blank marks
+      configs.forEach(c => { marks[c.name] = ''; });
 
       students.push({
-        roll_no: String(startRoll + s),
+        roll_no: '',
         name: '',
         marks: marks
       });
@@ -233,7 +259,7 @@ function buildPracticalSheetFromScratch() {
   document.getElementById('columnConfigSection').style.display = 'block';
   document.getElementById('directTableSection').style.display = 'block';
 
-  showDirectSuccess(`✓ Blank practical sheet initialized with ${students.length} students and ${configs.length} experiment columns. You can edit names, roll numbers, and marks directly in the table, then click "Validate & Calculate Direct Attainment".`);
+  showDirectSuccess(`✓ Blank practical sheet initialized with ${students.length} students and ${configs.length} experiment columns. You can enter roll numbers, names, and marks directly in the table, then click "Validate & Calculate Direct Attainment".`);
   setTimeout(() => {
     document.getElementById('directTableSection').scrollIntoView({ behavior: 'smooth', block: 'start' });
   }, 100);
@@ -242,6 +268,25 @@ function buildPracticalSheetFromScratch() {
 // =========================================================================
 // COLUMN CONFIGURATION & TABLE RENDERING
 // =========================================================================
+
+function onMappedCOSelectChange(idx) {
+  const sel = document.getElementById(`mappedCOSelect_${idx}`);
+  const customInp = document.getElementById(`mappedCOs_${idx}`);
+  if (!sel || !customInp) return;
+
+  if (sel.value === 'custom') {
+    customInp.style.display = 'inline-block';
+    customInp.focus();
+  } else {
+    customInp.style.display = 'none';
+    customInp.value = sel.value;
+  }
+
+  if (currentDirectRaw && currentDirectRaw.column_configs && currentDirectRaw.column_configs[idx]) {
+    const val = (sel.value === 'custom') ? customInp.value : sel.value;
+    currentDirectRaw.column_configs[idx].mapped_cos = val.split(',').map(s => s.trim().toUpperCase()).filter(Boolean);
+  }
+}
 
 function renderColumnConfigs(configs) {
   const container = document.getElementById('columnConfigGrid');
@@ -252,7 +297,9 @@ function renderColumnConfigs(configs) {
     card.className = `col-config-item ${col.checked ? '' : 'excluded'}`;
     card.id = `colConfigCard_${idx}`;
 
-    const cosStr = Array.isArray(col.mapped_cos) ? col.mapped_cos.join(', ') : col.mapped_cos;
+    const cosStr = Array.isArray(col.mapped_cos) ? col.mapped_cos.join(', ') : (col.mapped_cos || 'CO1');
+    const isStandardOption = ['CO1', 'CO2', 'CO3', 'CO4', 'CO5', 'CO6', 'CO1, CO2'].includes(cosStr) || (cosStr.includes('CO1') && cosStr.includes('CO5'));
+    const isAllCOs = cosStr.includes('CO1') && cosStr.includes('CO5') && !['CO1', 'CO2', 'CO3', 'CO4', 'CO5', 'CO6', 'CO1, CO2'].includes(cosStr);
 
     card.innerHTML = `
       <div class="flex-between">
@@ -269,13 +316,31 @@ function renderColumnConfigs(configs) {
         <input type="number" id="maxMarks_${idx}" class="form-control" style="width: 75px; padding: 3px 6px;" value="${col.max_marks}" min="1" step="0.5" oninput="onMaxMarksChange(${idx})" onchange="onMaxMarksChange(${idx})" ${col.checked ? '' : 'disabled'}>
       </div>
       <div id="colHint_${idx}" style="font-size: 11.5px; margin-top: 4px; display: none;"></div>
-      <div style="display: flex; gap: 8px; align-items: center; margin-top: 6px;">
-        <label style="font-size: 12px; font-weight: 600;">Mapped CO(s):</label>
-        <input type="text" id="mappedCOs_${idx}" class="form-control" style="padding: 3px 6px;" value="${cosStr}" placeholder="e.g. CO1, CO2" title="Separate multiple COs with comma" ${col.checked ? '' : 'disabled'}>
+      <div style="display: flex; gap: 8px; align-items: center; margin-top: 6px; flex-wrap: wrap;">
+        <label style="font-size: 12px; font-weight: 700; color: #1e3a8a;">Select Mapped CO:</label>
+        <select id="mappedCOSelect_${idx}" class="form-control" style="width: auto; padding: 2px 6px; font-size: 12px; height: 28px; font-weight: 700; color: #1e40af;" onchange="onMappedCOSelectChange(${idx})" ${col.checked ? '' : 'disabled'}>
+          <option value="CO1" ${cosStr === 'CO1' ? 'selected' : ''}>CO1</option>
+          <option value="CO2" ${cosStr === 'CO2' ? 'selected' : ''}>CO2</option>
+          <option value="CO3" ${cosStr === 'CO3' ? 'selected' : ''}>CO3</option>
+          <option value="CO4" ${cosStr === 'CO4' ? 'selected' : ''}>CO4</option>
+          <option value="CO5" ${cosStr === 'CO5' ? 'selected' : ''}>CO5</option>
+          <option value="CO6" ${cosStr === 'CO6' ? 'selected' : ''}>CO6</option>
+          <option value="CO1, CO2" ${cosStr === 'CO1, CO2' ? 'selected' : ''}>CO1, CO2</option>
+          <option value="CO1, CO2, CO3, CO4, CO5" ${isAllCOs ? 'selected' : ''}>All COs (CO1..CO5)</option>
+          <option value="custom" ${!isStandardOption ? 'selected' : ''}>Custom...</option>
+        </select>
+        <input type="text" id="mappedCOs_${idx}" class="form-control" style="padding: 2px 6px; font-size: 12px; width: 110px; height: 28px; display: ${!isStandardOption ? 'inline-block' : 'none'};" value="${cosStr}" placeholder="e.g. CO1, CO2" title="Separate multiple COs with comma" oninput="onCustomCOInput(${idx})" ${col.checked ? '' : 'disabled'}>
       </div>
     `;
     container.appendChild(card);
   });
+}
+
+function onCustomCOInput(idx) {
+  const inp = document.getElementById(`mappedCOs_${idx}`);
+  if (!inp || !currentDirectRaw || !currentDirectRaw.column_configs || !currentDirectRaw.column_configs[idx]) return;
+  const val = inp.value.trim();
+  currentDirectRaw.column_configs[idx].mapped_cos = val.split(',').map(s => s.trim().toUpperCase()).filter(Boolean);
 }
 
 function applyBatchExpMaxMarks() {
@@ -590,13 +655,21 @@ function collectDirectDataFromUI() {
   currentDirectRaw.column_configs.forEach((c, idx) => {
     const chk = document.getElementById(`chkCol_${idx}`);
     const maxInp = document.getElementById(`maxMarks_${idx}`);
+    const coSel = document.getElementById(`mappedCOSelect_${idx}`);
     const coInp = document.getElementById(`mappedCOs_${idx}`);
+
+    let cosList = c.mapped_cos;
+    if (coSel && coSel.value !== 'custom') {
+      cosList = coSel.value.split(',').map(s => s.trim().toUpperCase()).filter(Boolean);
+    } else if (coInp && coInp.value) {
+      cosList = coInp.value.split(',').map(s => s.trim().toUpperCase()).filter(Boolean);
+    }
 
     updatedConfigs.push({
       name: c.name,
       checked: chk ? chk.checked : true,
       max_marks: maxInp ? parseFloat(maxInp.value) : c.max_marks,
-      mapped_cos: coInp ? coInp.value.split(',').map(s => s.trim().toUpperCase()).filter(Boolean) : c.mapped_cos
+      mapped_cos: cosList
     });
   });
 
@@ -1039,3 +1112,7 @@ function proceedPage2PdfDownload() {
     window.location.href = url;
   }
 }
+
+window.addEventListener('DOMContentLoaded', () => {
+  renderScratchExpCOList();
+});

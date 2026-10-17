@@ -46,51 +46,6 @@
         >
       </div>
 
-      <!-- Course Nature / Type Selection: Theory vs Practical (No Integrated) -->
-      <div class="form-group mb-16">
-        <label class="form-label" style="font-weight: 700; color: var(--primary);">
-          Course Nature / Type <span class="required">*</span>
-        </label>
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 6px;">
-          <label style="display: flex; align-items: center; gap: 10px; padding: 10px 14px; border: 2px solid {% if teacher.course_type == 'practical' %}#e2e8f0{% else %}var(--primary){% endif %}; border-radius: 8px; cursor: pointer; background: {% if teacher.course_type == 'practical' %}#ffffff{% else %}#eff6ff{% endif %};" id="lblTheory">
-            <input type="radio" name="course_type" id="course_type_theory" value="theory" {% if teacher.course_type != 'practical' %}checked{% endif %} onchange="onCourseTypeChange()">
-            <div>
-              <strong style="color: #1e293b; display: block; font-size: 13.5px;">📖 Theory Course</strong>
-              <span style="font-size: 11px; color: #64748b;">Unit Tests, CCE, In-Sem &amp; Theory ESE</span>
-            </div>
-          </label>
-          <label style="display: flex; align-items: center; gap: 10px; padding: 10px 14px; border: 2px solid {% if teacher.course_type == 'practical' %}var(--primary){% else %}#e2e8f0{% endif %}; border-radius: 8px; cursor: pointer; background: {% if teacher.course_type == 'practical' %}#eff6ff{% else %}#ffffff{% endif %};" id="lblPractical">
-            <input type="radio" name="course_type" id="course_type_practical" value="practical" {% if teacher.course_type == 'practical' %}checked{% endif %} onchange="onCourseTypeChange()">
-            <div>
-              <strong style="color: #1e293b; display: block; font-size: 13.5px;">🔬 Practical / Laboratory</strong>
-              <span style="font-size: 11px; color: #64748b;">Experiments, Term Work (TW), PR/OR</span>
-            </div>
-          </label>
-        </div>
-      </div>
-
-      <!-- Laboratory Batch (Visible ONLY when Practical is selected) -->
-      <div class="form-group mb-16" id="batchGroup" style="display: {% if teacher.course_type == 'practical' %}block{% else %}none{% endif %}; background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 12px 14px;">
-        <label class="form-label" for="batch" style="color: #166534; font-weight: 700;">
-          Laboratory Batch <span class="required">*</span>
-        </label>
-        <div style="display: flex; gap: 10px; align-items: center;">
-          <select id="batch" name="batch" class="form-control" style="font-weight: 600; color: #166534;">
-            <option value="All Batches" {% if teacher.batch in ['All Batches', '', None] %}selected{% endif %}>All Batches (Combined Class / Full Division)</option>
-            <option value="Batch 1" {% if teacher.batch == 'Batch 1' %}selected{% endif %}>Batch 1 (A1 / B1 / C1)</option>
-            <option value="Batch 2" {% if teacher.batch == 'Batch 2' %}selected{% endif %}>Batch 2 (A2 / B2 / C2)</option>
-            <option value="Batch 3" {% if teacher.batch == 'Batch 3' %}selected{% endif %}>Batch 3 (A3 / B3 / C3)</option>
-            <option value="Batch 4" {% if teacher.batch == 'Batch 4' %}selected{% endif %}>Batch 4 (A4 / B4 / C4)</option>
-            {% if teacher.batch and teacher.batch not in ['All Batches', 'Batch 1', 'Batch 2', 'Batch 3', 'Batch 4'] %}
-            <option value="{{ teacher.batch }}" selected>{{ teacher.batch }}</option>
-            {% endif %}
-          </select>
-        </div>
-        <small style="color: #15803d; font-size: 11.5px; margin-top: 4px; display: block;">
-          Select the specific lab batch or choose 'All Batches' to evaluate the complete division together.
-        </small>
-      </div>
-
       <div class="grid-2">
         <div class="form-group">
           <label class="form-label" for="class_name">Class</label>
@@ -108,7 +63,7 @@
 
         <div class="form-group">
           <label class="form-label" for="division">Division</label>
-          <select id="division" name="division" class="form-control">
+          <select id="division" name="division" class="form-control" onchange="updateBatchOptions()">
             <option value="">-- Select Division --</option>
             <option value="A" {% if teacher.division == 'A' %}selected{% endif %}>A</option>
             <option value="B" {% if teacher.division == 'B' %}selected{% endif %}>B</option>
@@ -156,6 +111,35 @@
         </div>
       </div>
 
+      <!-- Course Nature / Type Selection (Placed at last, without small info) -->
+      <div class="form-group mb-16" style="margin-top: 14px;">
+        <label class="form-label" style="font-weight: 700; color: var(--primary);">
+          Course Nature / Type <span class="required">*</span>
+        </label>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 6px;">
+          <label style="display: flex; align-items: center; gap: 8px; padding: 12px 16px; border: 2px solid {% if teacher.course_type == 'practical' %}#e2e8f0{% else %}var(--primary){% endif %}; border-radius: 8px; cursor: pointer; background: {% if teacher.course_type == 'practical' %}#ffffff{% else %}#eff6ff{% endif %}; font-weight: 700; font-size: 14px;" id="lblTheory">
+            <input type="radio" name="course_type" id="course_type_theory" value="theory" {% if teacher.course_type != 'practical' %}checked{% endif %} onchange="onCourseTypeChange()">
+            <span>📖 Theory</span>
+          </label>
+          <label style="display: flex; align-items: center; gap: 8px; padding: 12px 16px; border: 2px solid {% if teacher.course_type == 'practical' %}var(--primary){% else %}#e2e8f0{% endif %}; border-radius: 8px; cursor: pointer; background: {% if teacher.course_type == 'practical' %}#eff6ff{% else %}#ffffff{% endif %}; font-weight: 700; font-size: 14px;" id="lblPractical">
+            <input type="radio" name="course_type" id="course_type_practical" value="practical" {% if teacher.course_type == 'practical' %}checked{% endif %} onchange="onCourseTypeChange()">
+            <span>🔬 Practical</span>
+          </label>
+        </div>
+      </div>
+
+      <!-- Laboratory Batch (Visible ONLY when Practical is selected) -->
+      <div class="form-group mb-16" id="batchGroup" style="display: {% if teacher.course_type == 'practical' %}block{% else %}none{% endif %}; background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 12px 14px;">
+        <label class="form-label" for="batch" style="color: #166534; font-weight: 700;">
+          Laboratory Batch <span class="required">*</span>
+        </label>
+        <div style="display: flex; gap: 10px; align-items: center;">
+          <select id="batch" name="batch" class="form-control" style="font-weight: 600; color: #166534;">
+            <!-- Populated dynamically based on Division (e.g. A1, A2, A3, A4) -->
+          </select>
+        </div>
+      </div>
+
       <div style="margin-top: 24px; display: flex; gap: 12px; align-items: center;">
         <button type="submit" id="btnContinue" class="btn btn-primary btn-lg" style="flex: 2;">
           Save &amp; Continue to Assessment Data &rarr;
@@ -175,14 +159,50 @@
 // Check if starting fresh
 const urlParams = new URLSearchParams(window.location.search);
 
+function updateBatchOptions(preferredBatch) {
+  const divSelect = document.getElementById('division');
+  const divVal = divSelect ? divSelect.value.trim().toUpperCase() : '';
+  const prefix = divVal || 'A';
+  const batchSelect = document.getElementById('batch');
+  if (!batchSelect) return;
+  const currentVal = preferredBatch || batchSelect.value;
+
+  batchSelect.innerHTML = '';
+  
+  const allOpt = document.createElement('option');
+  allOpt.value = 'All Batches';
+  allOpt.textContent = 'All Batches (Combined Class / Full Division)';
+  batchSelect.appendChild(allOpt);
+
+  [1, 2, 3, 4].forEach(num => {
+    const opt = document.createElement('option');
+    const code = `${prefix}${num}`;
+    opt.value = code;
+    opt.textContent = `Batch ${code}`;
+    batchSelect.appendChild(opt);
+  });
+
+  if (currentVal && Array.from(batchSelect.options).some(o => o.value === currentVal)) {
+    batchSelect.value = currentVal;
+  } else if (currentVal) {
+    const match = currentVal.match(/\d+/);
+    if (match) {
+      const converted = `${prefix}${match[0]}`;
+      if (Array.from(batchSelect.options).some(o => o.value === converted)) {
+        batchSelect.value = converted;
+      }
+    }
+  }
+}
+
 function onCourseTypeChange() {
-  const isPrac = document.getElementById('course_type_practical').checked;
+  const isPrac = document.getElementById('course_type_practical') && document.getElementById('course_type_practical').checked;
   const batchGroup = document.getElementById('batchGroup');
   const lblTheory = document.getElementById('lblTheory');
   const lblPractical = document.getElementById('lblPractical');
-  
   if (isPrac) {
     if (batchGroup) batchGroup.style.display = 'block';
+    updateBatchOptions();
     if (lblPractical) {
       lblPractical.style.borderColor = 'var(--primary)';
       lblPractical.style.background = '#eff6ff';
@@ -211,7 +231,7 @@ function clearTeacherFormQuiet() {
   const divInp = document.getElementById('division'); if (divInp) divInp.value = '';
   const semInp = document.getElementById('semester'); if (semInp) semInp.value = '';
   const ayInp = document.getElementById('academic_year'); if (ayInp) ayInp.value = '';
-  const batInp = document.getElementById('batch'); if (batInp) batInp.value = 'All Batches';
+  updateBatchOptions();
   const radTh = document.getElementById('course_type_theory'); if (radTh) radTh.checked = true;
   onCourseTypeChange();
   if (typeof clearStoredState === 'function') {
@@ -226,6 +246,7 @@ function clearTeacherForm() {
 
 // Pre-fill ONLY when actively navigating back from Step 2 with ?nav=1
 window.addEventListener('DOMContentLoaded', () => {
+  updateBatchOptions();
   if (urlParams.get('new') === '1' || urlParams.get('nav') !== '1') {
     // Visiting root or starting fresh: clear fields completely
     clearTeacherFormQuiet();
@@ -247,11 +268,10 @@ window.addEventListener('DOMContentLoaded', () => {
     const ayInp = document.getElementById('academic_year');
     if (ayInp && !ayInp.value && t.academic_year) ayInp.value = t.academic_year;
     
+    updateBatchOptions(t.batch);
     if (t.course_type === 'practical') {
       const radPrac = document.getElementById('course_type_practical');
       if (radPrac) radPrac.checked = true;
-      const batInp = document.getElementById('batch');
-      if (batInp && t.batch) batInp.value = t.batch;
     } else {
       const radTh = document.getElementById('course_type_theory');
       if (radTh) radTh.checked = true;

@@ -525,6 +525,10 @@ def test_practical_course_workflow():
     })
     assert res_t.status_code == 200
     assert res_t.get_json()['success'] is True
+    assert res_t.get_json()['redirect'] == '/practical-assessment'
+
+    res_page = client.get('/practical-assessment')
+    assert res_page.status_code == 200
     
     # Check session
     with client.session_transaction() as sess:
