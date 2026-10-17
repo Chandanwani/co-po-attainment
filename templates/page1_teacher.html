@@ -129,28 +129,31 @@
 <script>
 // Check if starting fresh
 const urlParams = new URLSearchParams(window.location.search);
-if (urlParams.get('new') === '1') {
-  if (typeof localStorage !== 'undefined') {
-    localStorage.removeItem('copo_attainment_state');
+
+function clearTeacherFormQuiet() {
+  const fnInp = document.getElementById('faculty_name'); if (fnInp) fnInp.value = '';
+  const subInp = document.getElementById('subject'); if (subInp) subInp.value = '';
+  const clsInp = document.getElementById('class_name'); if (clsInp) clsInp.value = '';
+  const divInp = document.getElementById('division'); if (divInp) divInp.value = '';
+  const semInp = document.getElementById('semester'); if (semInp) semInp.value = '';
+  const ayInp = document.getElementById('academic_year'); if (ayInp) ayInp.value = '';
+  if (typeof clearStoredState === 'function') {
+    clearStoredState();
   }
 }
 
 function clearTeacherForm() {
-  document.getElementById('faculty_name').value = '';
-  document.getElementById('subject').value = '';
-  document.getElementById('class_name').value = '';
-  document.getElementById('division').value = '';
-  document.getElementById('semester').value = '';
-  document.getElementById('academic_year').value = '';
-  if (typeof localStorage !== 'undefined') {
-    localStorage.removeItem('copo_attainment_state');
-  }
+  clearTeacherFormQuiet();
   fetch('/api/reset-session', { method: 'POST' }).catch(() => {});
 }
 
-// Pre-fill from localStorage if values are not already rendered by server
+// Pre-fill ONLY when actively navigating back from Step 2 with ?nav=1
 window.addEventListener('DOMContentLoaded', () => {
-  if (urlParams.get('new') === '1') return;
+  if (urlParams.get('new') === '1' || urlParams.get('nav') !== '1') {
+    // Visiting root or starting fresh: clear fields completely
+    clearTeacherFormQuiet();
+    return;
+  }
   const stored = (typeof getStoredState === 'function') ? getStoredState() : {};
   if (stored && stored.teacher) {
     const t = stored.teacher;

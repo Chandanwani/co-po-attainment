@@ -194,8 +194,9 @@ def serve_static(filename):
 @app.route('/')
 def page1_teacher():
     """Page 1: Teacher & Course information (NO NAVBAR)."""
-    # If starting fresh via ?new=1, clear current session
-    if request.args.get('new') == '1':
+    # If starting fresh (visiting / or ?new=1 or not explicitly navigating back from step 2)
+    nav_back = request.args.get('nav') == '1'
+    if not nav_back or request.args.get('new') == '1':
         session.clear()
         session['sid'] = secrets.token_hex(16)
         sid = session['sid']

@@ -308,8 +308,11 @@ async function resetEntireSession() {
     return;
   }
   try {
-    if (typeof localStorage !== 'undefined') {
-      localStorage.removeItem('copo_attainment_state');
+    if (typeof clearStoredState === 'function') {
+      clearStoredState();
+    } else {
+      if (typeof sessionStorage !== 'undefined') sessionStorage.clear();
+      if (typeof localStorage !== 'undefined') localStorage.removeItem('copo_attainment_state');
     }
     await fetch('/api/reset-session', { method: 'POST' });
     window.location.href = '/?new=1';
