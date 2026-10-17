@@ -192,7 +192,7 @@ def test_weighted_calculations():
 def test_headerless_copo_matrix():
     """Verify headerless matrix parsing and PO attainment."""
     client = app.test_client()
-    # Post headerless matrix text
+    # 1. Basic 3-column headerless matrix text
     raw_text = "3,2,1\n2,3,2" # 2 rows (CO1, CO2), 3 cols (PO1, PO2, PO3)
     res = client.post('/api/upload-copo', data={'pasted_text': raw_text})
     assert res.status_code == 200
@@ -202,6 +202,30 @@ def test_headerless_copo_matrix():
     assert data['co_list'] == ['CO1', 'CO2']
     assert data['po_list'] == ['PO1', 'PO2', 'PO3']
     assert data['matrix']['CO1']['PO1'] == 3.0
+
+    # 2. 15-column pure matrix with hyphens, no row or col names:
+    # Must preserve column 0 as PO1 and assign up to PSO4!
+    raw_15_col = "3,2,1,-,-,2,1,-,3,2,1,-,-,-,2\n2,3,2,1,-,2,1,3,2,1,-,2,1,3,1"
+    res15 = client.post('/api/upload-copo', data={'pasted_text': raw_15_col})
+    assert res15.status_code == 200
+    data15 = res15.get_json()
+    assert data15['success']
+    assert data15['is_headerless'] is True
+    assert data15['co_list'] == ['CO1', 'CO2']
+    expected_pos_15 = ['PO1', 'PO2', 'PO3', 'PO4', 'PO5', 'PO6', 'PO7', 'PO8', 'PO9', 'PO10', 'PO11', 'PSO1', 'PSO2', 'PSO3', 'PSO4']
+    assert data15['po_list'] == expected_pos_15
+    assert data15['matrix']['CO1']['PO1'] == 3.0  # 1st column preserved as PO1
+    assert data15['matrix']['CO1']['PSO4'] == 2.0 # 15th column mapped to PSO4
+    assert data15['matrix']['CO1']['PO4'] == 0.0  # hyphen '-' converted to 0.0
+
+    # 3. 16-column matrix: columns increase to PSO5!
+    raw_16_col = "3,2,1,0,0,2,1,0,3,2,1,0,0,0,2,1\n2,3,2,1,0,2,1,3,2,1,0,2,1,3,1,2"
+    res16 = client.post('/api/upload-copo', data={'pasted_text': raw_16_col})
+    assert res16.status_code == 200
+    data16 = res16.get_json()
+    assert data16['po_list'][-1] == 'PSO5'
+    assert data16['matrix']['CO1']['PO1'] == 3.0
+    assert data16['matrix']['CO1']['PSO5'] == 1.0
 
 
 def test_excel_export_complete():

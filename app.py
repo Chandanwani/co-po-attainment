@@ -691,110 +691,110 @@ def api_upload_copo():
     if not headers:
         return jsonify({'success': False, 'message': 'Uploaded file is empty.'}), 400
 
-    def _is_num(val):
+    def _as_mapping_number(val):
         s = str(val).strip()
-        if not s:
-            return True
+        if not s or s.upper() in ['-', '–', '—', '_', 'NA', 'N/A', 'NONE', 'NIL', 'NULL', 'X', '.']:
+            return 0.0
         try:
-            float(s)
-            return True
+            return float(s)
         except ValueError:
-            return False
+            return None
 
-    def _is_co_label(val):
+    def _is_po_header(val):
+        s = str(val).strip().upper()
+        return bool(re.match(r'^(PO|po|PSO|pso)[\s_-]*\d+', s)) or s in ['PO', 'PSO', 'PROGRAM OUTCOME', 'PROGRAM SPECIFIC OUTCOME']
+
+    def _is_co_header(val):
         s = str(val).strip().upper()
         return bool(re.match(r'^(CO|co)[\s_-]*\d+', s)) or s in ['CO', 'COURSE OUTCOME']
 
-    def _is_po_label(val):
-        s = str(val).strip().upper()
-        return bool(re.match(r'^(PO|po|PSO|pso)[\s_-]*\d+', s)) or 'PO' in s or 'PSO' in s
-
-    # Standard default PO / PSO list: PO1..PO11, PSO1..PSO3 (14 total)
+    # Default PO / PSO generator: PO1..PO11, then PSO1, PSO2, PSO3, PSO4, PSO5... as columns increase
     def _get_default_po_label(i):
         if i < 11:
             return f"PO{i + 1}"
         else:
             return f"PSO{i - 10}"
 
-    # Check if first row is pure numbers
-    first_row_numeric = all(_is_num(v) for v in headers if str(v).strip())
+    all_raw_rows = [[str(c).strip() for c in r] for r in ([headers] + rows) if r and any(str(c).strip() for c in r)]
+    if not all_raw_rows:
+        return jsonify({'success': False, 'message': 'Uploaded matrix is empty.'}), 400
 
-    # Check if first column of all data rows is numeric (meaning no CO names in first col)
-    first_col_numeric = True
-    for r in rows:
-        if r and len(r) > 0 and str(r[0]).strip() and not _is_num(r[0]):
-            first_col_numeric = False
-            break
+    row0 = all_raw_rows[0]
+    po_matches = sum(1 for c in row0 if _is_po_header(c))
+    num_matches = sum(1 for c in row0 if _as_mapping_number(c) is not None)
 
-    is_headerless = False
-    co_labels = []
-    po_labels = []
-    matrix_dict = {}
+    # Check if row 1 exists and starts with CO
+    row1_has_co = len(all_raw_rows) > 1 and len(all_raw_rows[1]) > 0 and _is_co_header(all_raw_rows[1][0])
 
-    if first_row_numeric:
-        # Case A: First row has no PO column names (pure numbers)
-        all_data_rows = [headers] + rows
-        col_count = len(headers)
-        
-        # Check if first column was an index/CO number or actual first PO correlation
-        # If col_count == 14, it exactly matches 11 POs + 3 PSOs (PO1-PO11, PSO1-PSO3)
-        # If col_count == 15, col 0 is likely row index/CO and cols 1-14 are POs
-        if col_count == 15 and first_col_numeric:
-            data_cols_start = 1
-            num_po_cols = 14
-        else:
-            data_cols_start = 0
-            num_po_cols = col_count
-
-        po_labels = [_get_default_po_label(i) for i in range(num_po_cols)]
-        co_labels = [f"CO{i+1}" for i in range(len(all_data_rows))]
-
-        for r_idx, row in enumerate(all_data_rows):
-            co_name = co_labels[r_idx]
-            matrix_dict[co_name] = {}
-            for c_idx, po_name in enumerate(po_labels):
-                raw_idx = data_cols_start + c_idx
-                val_str = row[raw_idx].strip() if raw_idx < len(row) else "0"
-                try:
-                    num_val = float(val_str)
-                except ValueError:
-                    num_val = 0.0
-                matrix_dict[co_name][po_name] = num_val
-        is_headerless = True
-
+    if po_matches >= 2 or (po_matches >= 1 and num_matches < len(row0) / 2):
+        has_po_headers = True
+    elif row1_has_co and not _is_co_header(row0[0]) and len(all_raw_rows) > 1:
+        has_po_headers = True
     else:
-        # Case B: First row has headers (or user provided header row)
-        # Check if header cells actually look like PO/PSOs
-        raw_po_headers = headers[1:] if len(headers) > 1 else headers
-        valid_po_count = sum(1 for h in raw_po_headers if _is_po_label(h))
+        has_po_headers = False
 
-        if valid_po_count == 0:
-            # Header row exists but doesn't have recognizable PO names (e.g. generic or blank)
-            po_labels = [_get_default_po_label(i) for i in range(len(raw_po_headers))]
+    if has_po_headers:
+        data_rows = all_raw_rows[1:]
+        po_header_row = row0
+    else:
+        data_rows = all_raw_rows
+        po_header_row = None
+
+    if not data_rows:
+        return jsonify({'success': False, 'message': 'No data rows found in matrix.'}), 400
+
+    # Check if data rows have a CO column on the left (column 0)
+    first_cells = [r[0] for r in data_rows if len(r) > 0]
+    co_matches = sum(1 for c in first_cells if _is_co_header(c))
+    non_num_cells = sum(1 for c in first_cells if _as_mapping_number(c) is None)
+    has_co_col = co_matches > 0 or (non_num_cells > len(data_rows) / 2 and non_num_cells > 0)
+
+    data_cols_start = 1 if has_co_col else 0
+
+    # Determine max data columns
+    max_data_cols = max(len(r) - data_cols_start for r in data_rows if len(r) > data_cols_start)
+    if max_data_cols <= 0:
+        max_data_cols = 14
+
+    # Determine PO labels
+    if has_po_headers and po_header_row:
+        if len(po_header_row) > max_data_cols or (has_co_col and len(po_header_row) == max_data_cols + 1):
+            raw_po_list = po_header_row[1:]
         else:
-            po_labels = [h.strip().upper() for h in raw_po_headers if h.strip()]
+            raw_po_list = po_header_row
 
-        for r_idx, row in enumerate(rows):
-            if not row or not any(str(c).strip() for c in row):
-                continue
-            first_cell = str(row[0]).strip()
-            # If first cell is numeric or empty or doesn't start with CO, assign default CO1..COn
-            if not first_cell or _is_num(first_cell) or not _is_co_label(first_cell):
-                co_name = f"CO{r_idx + 1}"
+        po_labels = []
+        for i in range(max_data_cols):
+            if i < len(raw_po_list) and raw_po_list[i].strip() and _is_po_header(raw_po_list[i]):
+                po_labels.append(raw_po_list[i].strip().upper())
             else:
-                co_name = first_cell.upper()
-                
-            co_labels.append(co_name)
-            matrix_dict[co_name] = {}
-            for c_idx, po_name in enumerate(po_labels, start=1):
-                val_str = row[c_idx].strip() if c_idx < len(row) else "0"
-                try:
-                    num_val = float(val_str)
-                except ValueError:
-                    num_val = 0.0
-                matrix_dict[co_name][po_name] = num_val
+                po_labels.append(_get_default_po_label(i))
+    else:
+        po_labels = [_get_default_po_label(i) for i in range(max_data_cols)]
 
-    # If co_labels is empty, provide default CO1-CO5
+    # Determine CO labels
+    co_labels = []
+    for r_idx, row in enumerate(data_rows):
+        if has_co_col and len(row) > 0 and row[0].strip() and _as_mapping_number(row[0]) is None:
+            co_name = row[0].strip().upper()
+        else:
+            co_name = f"CO{r_idx + 1}"
+        co_labels.append(co_name)
+
+    is_headerless = not has_po_headers and not has_co_col
+
+    # Build matrix dict
+    matrix_dict = {}
+    for r_idx, row in enumerate(data_rows):
+        co_name = co_labels[r_idx]
+        matrix_dict[co_name] = {}
+        for c_idx, po_name in enumerate(po_labels):
+            raw_idx = data_cols_start + c_idx
+            val_str = row[raw_idx].strip() if raw_idx < len(row) else '0'
+            num_val = _as_mapping_number(val_str)
+            matrix_dict[co_name][po_name] = num_val if num_val is not None else 0.0
+
+    # Fallback if empty
     if not co_labels:
         co_labels = [f"CO{i+1}" for i in range(5)]
         po_labels = [_get_default_po_label(i) for i in range(14)]
