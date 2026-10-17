@@ -621,6 +621,56 @@ def test_practical_course_workflow():
     assert any("LABORATORY" in p.text for p in doc.paragraphs)
 
 
+def test_practicle_column_parsing_and_mapping():
+    """Verify that columns named 'practicle 1', 'practicle 2', 'PR/OR' are recognized, given 25 max marks, and mapped to COs."""
+    client = app.test_client()
+
+    csv_content = (
+        "Sr No,Roll No,Student Name,practicle 1,practicle 2,practicle 3,practicle 4,PR/OR\n"
+        "1,101,Aarav Sharma,22,24,21,23,45\n"
+        "2,102,Ananya Patil,20,19,22,24,42\n"
+        "3,103,Rohan Kulkarni,24,25,23,24,48\n"
+    ).encode('utf-8')
+
+    res = client.post('/api/upload-direct', data={'file': (io.BytesIO(csv_content), 'lab_marks.csv')})
+    assert res.status_code == 200
+    data = res.get_json()
+    assert data['success'] is True
+    assert len(data['students']) == 3
+
+    configs = {c['name']: c for c in data['column_configs']}
+    assert 'practicle 1' in configs
+    assert 'practicle 2' in configs
+    assert 'practicle 3' in configs
+    assert 'practicle 4' in configs
+    assert 'PR/OR' in configs
+
+    # Check max marks
+    assert configs['practicle 1']['max_marks'] == 25.0
+    assert configs['practicle 2']['max_marks'] == 25.0
+    assert configs['practicle 3']['max_marks'] == 25.0
+    assert configs['practicle 4']['max_marks'] == 25.0
+    assert configs['PR/OR']['max_marks'] == 50.0
+
+    # Check smart 2-exp per CO mapping
+    assert configs['practicle 1']['mapped_cos'] == ['CO1']
+    assert configs['practicle 2']['mapped_cos'] == ['CO1']
+    assert configs['practicle 3']['mapped_cos'] == ['CO2']
+    assert configs['practicle 4']['mapped_cos'] == ['CO2']
+    assert configs['PR/OR']['mapped_cos'] == ['CO1', 'CO2', 'CO3', 'CO4', 'CO5']
+
+    # Compute attainment
+    res_comp = client.post('/api/compute-direct', json={
+        'students': data['students'],
+        'column_configs': data['column_configs'],
+        'passing_threshold_ratio': 0.50
+    })
+    assert res_comp.status_code == 200
+    comp_json = res_comp.get_json()
+    assert comp_json['success'] is True
+    assert len(comp_json['data']['co_summaries']) >= 2
+
+
 if __name__ == '__main__':
     test_gapc_attainment_formula()
     print("[PASS] test_gapc_attainment_formula")
@@ -654,4 +704,6 @@ if __name__ == '__main__':
     print("[PASS] test_below_60_percent_level_assignment_and_gapc_lookup")
     test_practical_course_workflow()
     print("[PASS] test_practical_course_workflow")
-    print("\nALL 16 TEST SUITES PASSED SUCCESSFULLY!")
+    test_practicle_column_parsing_and_mapping()
+    print("[PASS] test_practicle_column_parsing_and_mapping")
+    print("\nALL 17 TEST SUITES PASSED SUCCESSFULLY!")

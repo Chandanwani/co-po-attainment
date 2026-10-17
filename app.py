@@ -377,7 +377,7 @@ def api_upload_direct():
     roll_keywords = ['roll', 'seat', 'prn', 'reg', 'serial', 'urn', 'enroll', 'srno', 'rollno', 'student_id', 'ar_no', 'arno', 'ar.no']
     roll_exact = {'sr', 'sr.', 's.no', 's.no.', 'sno', 'no', '#', 'id', 'sr no', 'sr. no', 'roll no', 'roll no.', 'seat no', 'roll_no', 'ar', 'ar no', 'ar.', 'ar. no', 'ar no.'}
     name_keywords = ['name', 'student', 'candidate']
-    exam_keywords = ['test', 'exam', 'cce', 'ut', 'quiz', 'mark', 'score', 'assess', 'insem', 'prelim', 'sem', 'endsem', 'midsem', 'theory', 'practical', 'pr', 'oral', 'tw', 'termwork', 'co']
+    exam_keywords = ['test', 'exam', 'cce', 'ut', 'quiz', 'mark', 'score', 'assess', 'insem', 'prelim', 'sem', 'endsem', 'midsem', 'theory', 'practical', 'practicle', 'prac', 'pracs', 'pr', 'exp', 'expt', 'experiment', 'lab', 'oral', 'tw', 'termwork', 'co']
 
     h_lower = [h.lower() for h in headers]
     is_long_format = False
@@ -541,7 +541,7 @@ def api_upload_direct():
         m_max = re.search(r'\(\s*(\d+(?:\.\d+)?)\s*\)', col_name) or re.search(r'out\s*of\s*(\d+(?:\.\d+)?)', col_name, re.I)
         if m_max:
             base_max = float(m_max.group(1))
-        elif 'exp' in col_lower or 'prac' in col_lower or 'lab' in col_lower:
+        elif any(k in col_lower for k in ['exp', 'prac', 'practicle', 'practical', 'lab', 'job', 'task', 'pr']):
             base_max = 25.0
         elif 'cce' in col_lower or 'quiz' in col_lower or 'assign' in col_lower:
             base_max = 10.0
@@ -571,14 +571,18 @@ def api_upload_direct():
                 def_max = float(math.ceil(max_observed / 10.0) * 10)
 
         # Smart CO assignment:
-        # For Practical/Experiments: Exp 1-2 -> CO1, Exp 3-4 -> CO2, Exp 5-6 -> CO3, Exp 7-8 -> CO4, Exp 9-10 -> CO5
-        m_exp = re.search(r'exp(?:eriment)?\s*(\d+)', col_name, re.I)
+        # For Practical/Experiments: Exp 1-2 / Practicle 1-2 -> CO1, Exp 3-4 -> CO2, Exp 5-6 -> CO3, etc.
+        m_exp = re.search(r'(?:exp(?:eriment)?|pract(?:ic(?:al|le))?|prac|pr|lab|job|task)\s*[-_#]?\s*(\d+)', col_name, re.I)
         if m_exp:
             exp_num = int(m_exp.group(1))
             co_num = min(6, ((exp_num - 1) // 2) + 1)
             mapped_cos = [f"CO{co_num}"]
-        elif 'oral' in col_lower or 'pr/or' in col_lower or 'final' in col_lower:
+        elif any(k in col_lower for k in ['oral', 'pr/or', 'viva', 'pr exam', 'practical exam', 'final']):
             mapped_cos = ['CO1', 'CO2', 'CO3', 'CO4', 'CO5']
+        elif is_practical_course or any(k in col_lower for k in ['practicle', 'practical', 'prac', 'exp', 'lab', 'job']):
+            # For practical assessments without a specific number, map sequentially (2 assessments per CO)
+            co_num = min(6, ((idx - 1) // 2) + 1)
+            mapped_cos = [f"CO{co_num}"]
         else:
             m_co = re.search(r'co\s*(\d+)', col_name, re.I)
             if m_co:
@@ -586,7 +590,9 @@ def api_upload_direct():
             else:
                 m_num = re.search(r'\d+', col_name)
                 if m_num:
-                    mapped_cos = [f"CO{m_num.group()}"]
+                    num_val = int(m_num.group())
+                    co_num = min(6, max(1, num_val))
+                    mapped_cos = [f"CO{co_num}"]
                 else:
                     mapped_cos = [f"CO{((idx - 1) % 6) + 1}"]
 

@@ -113,8 +113,11 @@
         <!-- Experiments Count & Max Marks -->
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 14px;">
           <div>
-            <label style="font-size: 12.5px; font-weight: 600;">Number of Experiments:</label>
-            <input type="number" id="scratchExpCount" class="form-control" value="10" min="1" max="25" oninput="renderScratchExpCOList()" onchange="renderScratchExpCOList()">
+            <label style="font-size: 12.5px; font-weight: 700; color: var(--primary);">How Many Experiments? (Enter count):</label>
+            <input type="number" id="scratchExpCount" class="form-control" placeholder="Enter number of experiments (e.g. 8, 10, 12)" min="1" max="40" oninput="renderScratchExpCOList()" onchange="renderScratchExpCOList()">
+            <small style="color: var(--text-muted); font-size: 11.5px; display: block; margin-top: 3px;">
+              Enter your experiment count to open editable CO fields.
+            </small>
           </div>
           <div>
             <label style="font-size: 12.5px; font-weight: 600;">Default Max Marks per Experiment:</label>
@@ -122,15 +125,15 @@
           </div>
         </div>
 
-        <!-- Direct CO Mapping per Experiment Selected by User -->
+        <!-- Direct CO Mapping per Experiment Editable by User -->
         <div class="form-group mb-14">
           <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
             <label style="font-size: 12.5px; font-weight: 700; color: var(--primary);">
-              Select CO Mapping for Each Experiment:
+              Mapped CO for Each Experiment:
             </label>
-            <span style="font-size: 11.5px; color: var(--text-muted);">(Select which CO each experiment belongs to)</span>
+            <span style="font-size: 11.5px; color: var(--text-muted);">(Type / edit CO directly — no dropdowns)</span>
           </div>
-          <div id="scratchExpCOGrid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 8px; background: #ffffff; border: 1px solid #cbd5e1; border-radius: 6px; padding: 10px;">
+          <div id="scratchExpCOGrid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 8px; background: #ffffff; border: 1px solid #cbd5e1; border-radius: 6px; padding: 10px;">
             <!-- Rendered dynamically by practical.js based on scratchExpCount -->
           </div>
         </div>
