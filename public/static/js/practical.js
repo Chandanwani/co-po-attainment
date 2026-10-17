@@ -755,8 +755,8 @@ function displayDirectResults(data) {
   if (btnTop) btnTop.style.display = 'inline-flex';
   const btnPdfTop = document.getElementById('btnPage2PdfTop');
   if (btnPdfTop) btnPdfTop.style.display = 'inline-flex';
-  const nextBar = document.getElementById('directNextActionBar');
-  if (nextBar) nextBar.style.display = 'flex';
+  const nextBar = document.getElementById('bottomNextActionBar');
+  if (nextBar) nextBar.style.display = 'block';
 
   const total = data.total_students || 0;
   const passed = data.overall_passed_students !== undefined ? data.overall_passed_students : 0;
@@ -933,7 +933,8 @@ async function uploadIndirectFile() {
   }
   const formData = new FormData();
   formData.append('file', fileInput.files[0]);
-  formData.append('rating_scale', document.getElementById('ratingScaleSelect').value);
+  const scale = document.getElementById('indirectMaxRatingInput')?.value || '10';
+  formData.append('rating_scale', scale);
   await sendIndirectParseRequest(formData);
 }
 
@@ -945,22 +946,9 @@ async function uploadIndirectPasted() {
   }
   const formData = new FormData();
   formData.append('pasted_text', text);
-  formData.append('rating_scale', document.getElementById('ratingScaleSelect').value);
+  const scale = document.getElementById('indirectMaxRatingInput')?.value || '10';
+  formData.append('rating_scale', scale);
   await sendIndirectParseRequest(formData);
-}
-
-function syncRatingScaleFromSelect() {
-  const sel = document.getElementById('ratingScaleSelect');
-  const inp = document.getElementById('indirectMaxRatingInput');
-  if (sel && inp) inp.value = sel.value;
-}
-
-function syncRatingScaleFromInput() {
-  const sel = document.getElementById('ratingScaleSelect');
-  const inp = document.getElementById('indirectMaxRatingInput');
-  if (sel && inp && (inp.value === '5' || inp.value === '10')) {
-    sel.value = inp.value;
-  }
 }
 
 function renderDetectedCOs(cos) {
@@ -1094,8 +1082,7 @@ function collectIndirectDataFromUI() {
     return null;
   }
 
-  const maxRating = parseFloat(document.getElementById('indirectMaxRatingInput')?.value) ||
-                    parseFloat(document.getElementById('ratingScaleSelect')?.value) || 10.0;
+  const maxRating = parseFloat(document.getElementById('indirectMaxRatingInput')?.value) || 10.0;
 
   return {
     ratings_data: ratings,
@@ -1180,10 +1167,6 @@ async function sendIndirectParseRequest(formData) {
     const configSec = document.getElementById('indirectConfigSection');
     if (configSec) configSec.style.display = 'block';
 
-    const currentScale = document.getElementById('ratingScaleSelect')?.value || '10';
-    const maxInp = document.getElementById('indirectMaxRatingInput');
-    if (maxInp) maxInp.value = currentScale;
-
     // Immediately compute indirect attainment from parsed data
     await calculateIndirectAttainment();
 
@@ -1203,7 +1186,7 @@ function displayIndirectResults(data) {
   const totalResp = data.total_responses ?? (data.student_ratings ? data.student_ratings.length : 0);
   document.getElementById('statIndirectResponses').textContent = totalResp;
 
-  const ratingScale = data.rating_scale || document.getElementById('indirectMaxRatingInput')?.value || document.getElementById('ratingScaleSelect')?.value || 10;
+  const ratingScale = data.rating_scale || document.getElementById('indirectMaxRatingInput')?.value || 10;
   let avgRating = data.overall_avg_rating;
   let avgAtt = data.overall_attainment;
 
@@ -1266,6 +1249,8 @@ async function calculateWeightedAttainment() {
 function displayWeightedResults(data) {
   document.getElementById('combinedAttainmentSection').style.display = 'block';
   document.getElementById('overallCombinedBadge').textContent = `Overall Course Attainment: ${data.overall_attainment} / 3.00 (${data.overall_level_label})`;
+  const btmBar = document.getElementById('bottomNextActionBar');
+  if (btmBar) btmBar.style.display = 'block';
 
   // Save to stored state for persistence
   if (typeof saveStoredState === 'function') {
@@ -1435,8 +1420,8 @@ window.addEventListener('DOMContentLoaded', async () => {
       if (btnGo) btnGo.style.display = 'inline-flex';
       const btnPdf = document.getElementById('btnPage2PdfTop');
       if (btnPdf) btnPdf.style.display = 'inline-flex';
-      const nextBar = document.getElementById('directNextActionBar');
-      if (nextBar) nextBar.style.display = 'flex';
+      const nextBar = document.getElementById('bottomNextActionBar');
+      if (nextBar) nextBar.style.display = 'block';
     }
 
     const indirectRaw = stored.indirect_raw || (state.indirect_raw ? {
