@@ -330,6 +330,8 @@ def api_sync_state():
         current_state['direct_computed'] = state_payload['direct']
     if 'indirect' in state_payload and state_payload['indirect']:
         current_state['indirect_computed'] = state_payload['indirect']
+    if 'indirect_raw' in state_payload and state_payload['indirect_raw']:
+        current_state['indirect_raw'] = state_payload['indirect_raw']
     if 'weighted' in state_payload and state_payload['weighted']:
         current_state['weighted_computed'] = state_payload['weighted']
     if 'copo' in state_payload and state_payload['copo']:
@@ -1180,6 +1182,7 @@ def api_get_full_state():
         'teacher': state.get('teacher', {}),
         'direct': state.get('direct_computed'),
         'indirect': state.get('indirect_computed'),
+        'indirect_raw': state.get('indirect_raw'),
         'weighted': state.get('weighted_computed'),
         'copo': state.get('copo_computed'),
         'learners': state.get('learners_data')

@@ -44,15 +44,20 @@ function switchDirectTab(mode) {
 }
 
 function switchIndirectTab(mode) {
-  document.querySelectorAll('#indirectFileTab, #indirectPasteTab').forEach(el => el.classList.remove('active'));
+  document.querySelectorAll('#indirectFileTab, #indirectPasteTab, #indirectManualTab').forEach(el => el.classList.remove('active'));
   if (mode === 'file') {
-    document.getElementById('indirectFileTab').classList.add('active');
-  } else {
-    document.getElementById('indirectPasteTab').classList.add('active');
+    document.getElementById('indirectFileTab')?.classList.add('active');
+  } else if (mode === 'paste') {
+    document.getElementById('indirectPasteTab')?.classList.add('active');
+  } else if (mode === 'manual') {
+    document.getElementById('indirectManualTab')?.classList.add('active');
   }
-  const btns = event.target.parentElement.querySelectorAll('.tab-btn');
-  btns.forEach(b => b.classList.remove('active'));
-  event.target.classList.add('active');
+  const indirectCard = document.getElementById('indirectFileTab')?.closest('.card');
+  if (indirectCard && window.event && window.event.target && window.event.target.classList.contains('tab-btn')) {
+    const btns = indirectCard.querySelectorAll('.tabs .tab-btn');
+    btns.forEach(b => b.classList.remove('active'));
+    window.event.target.classList.add('active');
+  }
 }
 
 // Weights handler
@@ -944,6 +949,209 @@ async function uploadIndirectPasted() {
   await sendIndirectParseRequest(formData);
 }
 
+function syncRatingScaleFromSelect() {
+  const sel = document.getElementById('ratingScaleSelect');
+  const inp = document.getElementById('indirectMaxRatingInput');
+  if (sel && inp) inp.value = sel.value;
+}
+
+function syncRatingScaleFromInput() {
+  const sel = document.getElementById('ratingScaleSelect');
+  const inp = document.getElementById('indirectMaxRatingInput');
+  if (sel && inp && (inp.value === '5' || inp.value === '10')) {
+    sel.value = inp.value;
+  }
+}
+
+function renderDetectedCOs(cos) {
+  const container = document.getElementById('detectedCOsList');
+  if (!container) return;
+  container.innerHTML = '';
+  cos.forEach(co => {
+    const badge = document.createElement('span');
+    badge.className = 'badge';
+    badge.style.background = '#e0f2fe';
+    badge.style.color = '#0369a1';
+    badge.textContent = co;
+    container.appendChild(badge);
+  });
+}
+
+function renderIndirectTable(ratings, cos) {
+  const table = document.getElementById('indirectRatingsTable');
+  if (!table) return;
+  const thead = table.querySelector('thead');
+  const tbody = table.querySelector('tbody');
+
+  let thHtml = '<tr><th style="width: 50px;" class="text-center">#</th>';
+  cos.forEach(co => {
+    thHtml += `<th class="text-center">${co}</th>`;
+  });
+  thHtml += '<th style="width: 60px;" class="text-center">Action</th></tr>';
+  thead.innerHTML = thHtml;
+
+  tbody.innerHTML = '';
+  ratings.forEach((row, rIdx) => {
+    const tr = document.createElement('tr');
+    let trHtml = `<td class="text-center bold">${rIdx + 1}</td>`;
+    cos.forEach(co => {
+      const val = row[co] ?? '';
+      trHtml += `<td><input type="number" step="0.5" class="cell-input" data-co="${co}" value="${val}" style="width: 100%; text-align: center;"></td>`;
+    });
+    trHtml += `<td class="text-center"><button type="button" class="btn-clear-file" onclick="removeIndirectRow(this)" title="Delete row" style="display:inline-block; font-size:14px; width:22px; height:22px; line-height:20px;">&times;</button></td>`;
+    tr.innerHTML = trHtml;
+    tbody.appendChild(tr);
+  });
+}
+
+function addIndirectRow() {
+  const table = document.getElementById('indirectRatingsTable');
+  if (!table) return;
+  const tbody = table.querySelector('tbody');
+  const cos = currentIndirectRaw?.detected_cos || ['CO1', 'CO2', 'CO3', 'CO4', 'CO5'];
+  const rIdx = tbody.querySelectorAll('tr').length;
+
+  const tr = document.createElement('tr');
+  let trHtml = `<td class="text-center bold">${rIdx + 1}</td>`;
+  cos.forEach(co => {
+    trHtml += `<td><input type="number" step="0.5" class="cell-input" data-co="${co}" value="" style="width: 100%; text-align: center;"></td>`;
+  });
+  trHtml += `<td class="text-center"><button type="button" class="btn-clear-file" onclick="removeIndirectRow(this)" title="Delete row" style="display:inline-block; font-size:14px; width:22px; height:22px; line-height:20px;">&times;</button></td>`;
+  tr.innerHTML = trHtml;
+  tbody.appendChild(tr);
+}
+
+function removeIndirectRow(btn) {
+  const tr = btn.closest('tr');
+  if (tr) {
+    tr.remove();
+    const rows = document.querySelectorAll('#indirectRatingsTable tbody tr');
+    rows.forEach((r, idx) => {
+      const firstCol = r.querySelector('td');
+      if (firstCol) firstCol.textContent = idx + 1;
+    });
+  }
+}
+
+function initManualIndirectTable() {
+  hideIndirectAlerts();
+  let cos = [];
+  if (currentDirectRaw && currentDirectRaw.co_summaries && currentDirectRaw.co_summaries.length > 0) {
+    cos = currentDirectRaw.co_summaries.map(c => c.co);
+  } else if (currentDirectRaw && currentDirectRaw.all_cos && currentDirectRaw.all_cos.length > 0) {
+    cos = currentDirectRaw.all_cos;
+  } else {
+    cos = ['CO1', 'CO2', 'CO3', 'CO4', 'CO5'];
+  }
+
+  const initialRatings = [];
+  const studentRows = document.querySelectorAll('#directMarksTable tbody tr');
+  const count = studentRows.length > 0 ? Math.min(studentRows.length, 10) : 5;
+  for (let i = 0; i < count; i++) {
+    const rowObj = {};
+    cos.forEach(co => { rowObj[co] = ''; });
+    initialRatings.push(rowObj);
+  }
+
+  currentIndirectRaw = {
+    detected_cos: cos,
+    ratings_data: initialRatings
+  };
+
+  renderDetectedCOs(cos);
+  renderIndirectTable(initialRatings, cos);
+  const sec = document.getElementById('indirectConfigSection');
+  if (sec) {
+    sec.style.display = 'block';
+    setTimeout(() => {
+      sec.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }, 100);
+  }
+}
+
+function collectIndirectDataFromUI() {
+  if (!currentIndirectRaw && !document.getElementById('indirectRatingsTable')) return null;
+  const cos = currentIndirectRaw?.detected_cos || ['CO1', 'CO2', 'CO3', 'CO4', 'CO5'];
+  const rows = document.getElementById('indirectRatingsTable').querySelectorAll('tbody tr');
+  const ratings = [];
+
+  rows.forEach(tr => {
+    const rowObj = {};
+    let hasAnyValue = false;
+    cos.forEach(co => {
+      const inp = tr.querySelector(`input[data-co="${co}"]`);
+      const v = inp ? inp.value.trim() : '';
+      rowObj[co] = v;
+      if (v !== '') hasAnyValue = true;
+    });
+    if (hasAnyValue) {
+      ratings.push(rowObj);
+    }
+  });
+
+  if (ratings.length === 0) {
+    showIndirectError('Please enter at least one row of survey ratings in the table.');
+    return null;
+  }
+
+  const maxRating = parseFloat(document.getElementById('indirectMaxRatingInput')?.value) ||
+                    parseFloat(document.getElementById('ratingScaleSelect')?.value) || 10.0;
+
+  return {
+    ratings_data: ratings,
+    max_rating: maxRating,
+    co_columns_override: cos,
+    mapping_target: 'CO'
+  };
+}
+
+async function calculateIndirectAttainment() {
+  hideIndirectAlerts();
+  const payload = collectIndirectDataFromUI();
+  if (!payload) return;
+
+  try {
+    const res = await fetch('/api/compute-indirect', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    const result = await res.json();
+    if (!result.success) {
+      const errList = result.errors || [result.message || 'Indirect survey validation error.'];
+      showIndirectError('Indirect Survey Validation Errors:\n• ' + errList.join('\n• '));
+      return;
+    }
+
+    if (currentIndirectRaw) {
+      currentIndirectRaw.ratings_data = payload.ratings_data;
+      currentIndirectRaw.max_rating = payload.max_rating;
+      currentIndirectRaw.detected_cos = payload.co_columns_override;
+    }
+
+    displayIndirectResults(result.data);
+
+    if (typeof saveStoredState === 'function') {
+      saveStoredState({
+        indirect: result.data,
+        indirect_raw: {
+          detected_cos: payload.co_columns_override,
+          ratings_data: payload.ratings_data,
+          max_rating: payload.max_rating
+        }
+      });
+    }
+    if (typeof syncStateToBackend === 'function') {
+      syncStateToBackend();
+    }
+
+    showIndirectSuccess(`✓ Indirect exit survey calculated: ${result.data.total_responses} student responses for ${result.data.co_summaries.length} COs.`);
+    await calculateWeightedAttainment();
+  } catch (err) {
+    showIndirectError('Indirect calculation failed: ' + err.message);
+  }
+}
+
 async function sendIndirectParseRequest(formData) {
   hideIndirectAlerts();
   try {
@@ -963,34 +1171,25 @@ async function sendIndirectParseRequest(formData) {
       return;
     }
 
-    const ratingScale = parseFloat(document.getElementById('ratingScaleSelect')?.value) || 10.0;
-    const compRes = await fetch('/api/compute-indirect', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        ratings_data: result.ratings_data,
-        max_rating: ratingScale,
-        co_columns_override: detectedCOs,
-        mapping_target: 'CO'
-      })
-    });
-    const compResult = await compRes.json();
-    if (!compResult.success) {
-      const errList = compResult.errors || [compResult.message || 'Indirect survey validation error.'];
-      showIndirectError('Indirect Survey Validation Errors:\n• ' + errList.join('\n• '));
-      return;
-    }
+    currentIndirectRaw = result;
 
-    currentIndirectRaw = compResult.data;
-    displayIndirectResults(compResult.data);
-    if (typeof saveStoredState === 'function') {
-      saveStoredState({ indirect: compResult.data });
-    }
-    if (typeof syncStateToBackend === 'function') {
-      syncStateToBackend();
-    }
-    showIndirectSuccess(`✓ Indirect exit survey processed: ${compResult.data.total_responses} student responses for ${compResult.data.co_summaries.length} COs.`);
-    await calculateWeightedAttainment();
+    // Render detected CO badges and the editable table so user can see and write/edit ratings!
+    renderDetectedCOs(result.detected_cos);
+    renderIndirectTable(result.ratings_data, result.detected_cos);
+
+    const configSec = document.getElementById('indirectConfigSection');
+    if (configSec) configSec.style.display = 'block';
+
+    const currentScale = document.getElementById('ratingScaleSelect')?.value || '10';
+    const maxInp = document.getElementById('indirectMaxRatingInput');
+    if (maxInp) maxInp.value = currentScale;
+
+    // Immediately compute indirect attainment from parsed data
+    await calculateIndirectAttainment();
+
+    setTimeout(() => {
+      configSec?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }, 100);
   } catch (err) {
     showIndirectError('Upload failed: ' + err.message);
   }
@@ -1004,7 +1203,7 @@ function displayIndirectResults(data) {
   const totalResp = data.total_responses ?? (data.student_ratings ? data.student_ratings.length : 0);
   document.getElementById('statIndirectResponses').textContent = totalResp;
 
-  const ratingScale = data.rating_scale || document.getElementById('ratingScaleSelect')?.value || 10;
+  const ratingScale = data.rating_scale || document.getElementById('indirectMaxRatingInput')?.value || document.getElementById('ratingScaleSelect')?.value || 10;
   let avgRating = data.overall_avg_rating;
   let avgAtt = data.overall_attainment;
 
@@ -1240,8 +1439,25 @@ window.addEventListener('DOMContentLoaded', async () => {
       if (nextBar) nextBar.style.display = 'flex';
     }
 
+    const indirectRaw = stored.indirect_raw || (state.indirect_raw ? {
+      detected_cos: (state.indirect_raw.headers || []).filter(h => h.toUpperCase().includes('CO')),
+      ratings_data: state.indirect_raw.ratings_data
+    } : null);
+
+    if (indirectRaw && indirectRaw.ratings_data && indirectRaw.ratings_data.length > 0) {
+      currentIndirectRaw = indirectRaw;
+      renderDetectedCOs(indirectRaw.detected_cos || ['CO1', 'CO2', 'CO3', 'CO4', 'CO5']);
+      renderIndirectTable(indirectRaw.ratings_data, indirectRaw.detected_cos || ['CO1', 'CO2', 'CO3', 'CO4', 'CO5']);
+      const configSec = document.getElementById('indirectConfigSection');
+      if (configSec) configSec.style.display = 'block';
+      if (indirectRaw.max_rating) {
+        const inp = document.getElementById('indirectMaxRatingInput');
+        if (inp) inp.value = indirectRaw.max_rating;
+      }
+    }
+
     if (indirectData && indirectData.co_summaries && indirectData.co_summaries.length > 0) {
-      currentIndirectRaw = indirectData;
+      currentIndirectRaw = currentIndirectRaw || indirectData;
       displayIndirectResults(indirectData);
     }
 
