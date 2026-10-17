@@ -4,6 +4,39 @@
 
 let repCharts = {};
 
+// Custom Chart.js Plugin: Draw data value on top of each bar
+const barTopValuePlugin = {
+  id: 'barTopValuePlugin',
+  afterDatasetsDraw(chart) {
+    const { ctx, data } = chart;
+    if (chart.config.type !== 'bar') return;
+    ctx.save();
+    chart.data.datasets.forEach((dataset, datasetIndex) => {
+      const meta = chart.getDatasetMeta(datasetIndex);
+      if (meta.hidden) return;
+      meta.data.forEach((bar, index) => {
+        const val = dataset.data[index];
+        if (val === null || val === undefined || val === 0) return;
+        const valStr = typeof val === 'number' ? (Number.isInteger(val) ? val.toString() : val.toFixed(2)) : val.toString();
+        ctx.fillStyle = '#1e293b';
+        ctx.font = 'bold 9.5px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'bottom';
+        ctx.fillText(valStr, bar.x, bar.y - 3);
+      });
+    });
+    ctx.restore();
+  }
+};
+
+if (typeof Chart !== 'undefined' && Chart.register) {
+  try {
+    Chart.register(barTopValuePlugin);
+  } catch (e) {
+    console.warn('Could not register barTopValuePlugin:', e);
+  }
+}
+
 function getBadgeHtml(levelStr) {
   if (!levelStr) return '<span class="badge">-</span>';
   let cls = 'badge-level-0';
@@ -26,8 +59,27 @@ async function loadFinalReportData() {
     
     // Check if state is empty, restore from localStorage if available
     const stored = (typeof getStoredState === 'function') ? getStoredState() : {};
-    if ((!state.direct || !state.direct.co_summaries) && stored.direct) {
-      state = { ...stored, ...state, direct: stored.direct, weighted: stored.weighted, copo: stored.copo };
+    if (stored && (stored.direct || stored.copo || stored.teacher)) {
+      let needsSync = false;
+      if ((!state.direct || !state.direct.co_summaries) && stored.direct) {
+        state.direct = stored.direct;
+        needsSync = true;
+      }
+      if ((!state.weighted || !state.weighted.combined_results) && stored.weighted) {
+        state.weighted = stored.weighted;
+        needsSync = true;
+      }
+      if ((!state.copo || !state.copo.po_results) && stored.copo) {
+        state.copo = stored.copo;
+        needsSync = true;
+      }
+      if ((!state.teacher || !state.teacher.faculty_name) && stored.teacher) {
+        state.teacher = stored.teacher;
+        needsSync = true;
+      }
+      if (needsSync && typeof syncStateToBackend === 'function') {
+        syncStateToBackend(stored);
+      }
     }
     
     renderReport(state);
@@ -301,7 +353,7 @@ function renderCOCharts(weighted, direct) {
     options: {
       responsive: true,
       maintainAspectRatio: false,
-      scales: { y: { beginAtZero: true, max: 3.0, ticks: { stepSize: 0.5 } } }
+      scales: { y: { beginAtZero: true, max: 3.3, ticks: { stepSize: 0.5 } } }
     }
   });
 
@@ -322,7 +374,7 @@ function renderCOCharts(weighted, direct) {
     options: {
       responsive: true,
       maintainAspectRatio: false,
-      scales: { y: { beginAtZero: true, max: 100 } }
+      scales: { y: { beginAtZero: true, max: 110, ticks: { stepSize: 20 } } }
     }
   });
 }
@@ -347,7 +399,7 @@ function renderPOCharts(po_results) {
     options: {
       responsive: true,
       maintainAspectRatio: false,
-      scales: { y: { beginAtZero: true, max: 3.0, ticks: { stepSize: 0.5 } } }
+      scales: { y: { beginAtZero: true, max: 3.3, ticks: { stepSize: 0.5 } } }
     }
   });
 

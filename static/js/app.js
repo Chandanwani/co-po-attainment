@@ -1173,20 +1173,40 @@ function proceedPage2PdfDownload() {
 window.addEventListener('DOMContentLoaded', async () => {
   try {
     const res = await fetch('/api/get-full-state');
-    const state = await res.json();
-    if (state.direct && state.direct.co_summaries && state.direct.co_summaries.length > 0) {
-      renderDirectResults(state.direct);
+    let state = await res.json();
+    const stored = (typeof getStoredState === 'function') ? getStoredState() : {};
+
+    let directData = state.direct;
+    if ((!directData || !directData.co_summaries || directData.co_summaries.length === 0) && stored.direct) {
+      directData = stored.direct;
+      if (typeof syncStateToBackend === 'function') {
+        syncStateToBackend(stored);
+      }
+    }
+
+    let indirectData = state.indirect;
+    if ((!indirectData || !indirectData.co_summaries || indirectData.co_summaries.length === 0) && stored.indirect) {
+      indirectData = stored.indirect;
+    }
+
+    let weightedData = state.weighted;
+    if ((!weightedData || !weightedData.combined_results || weightedData.combined_results.length === 0) && stored.weighted) {
+      weightedData = stored.weighted;
+    }
+
+    if (directData && directData.co_summaries && directData.co_summaries.length > 0) {
+      renderDirectResults(directData);
       document.getElementById('directResultsSection').style.display = 'block';
       document.getElementById('btnGoToStep3').style.display = 'inline-flex';
       const btnPdf = document.getElementById('btnPage2PdfTop');
       if (btnPdf) btnPdf.style.display = 'inline-flex';
     }
-    if (state.indirect && state.indirect.co_summaries && state.indirect.co_summaries.length > 0) {
-      renderIndirectResults(state.indirect);
+    if (indirectData && indirectData.co_summaries && indirectData.co_summaries.length > 0) {
+      renderIndirectResults(indirectData);
       document.getElementById('indirectResultsSection').style.display = 'block';
     }
-    if (state.weighted && state.weighted.combined_results && state.weighted.combined_results.length > 0) {
-      renderWeightedResults(state.weighted);
+    if (weightedData && weightedData.combined_results && weightedData.combined_results.length > 0) {
+      renderWeightedResults(weightedData);
       document.getElementById('weightedSection').style.display = 'block';
     }
   } catch (err) {

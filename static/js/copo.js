@@ -3,7 +3,7 @@
  */
 
 let currentCOPOState = {
-  co_list: ['CO1', 'CO2', 'CO3', 'CO4', 'CO5', 'CO6'],
+  co_list: ['CO1', 'CO2', 'CO3', 'CO4', 'CO5'],
   po_list: ['PO1', 'PO2', 'PO3', 'PO4', 'PO5', 'PO6', 'PO7', 'PO8', 'PO9', 'PO10', 'PO11', 'PSO1', 'PSO2', 'PSO3'],
   matrix: {}
 };
@@ -84,7 +84,7 @@ async function sendCOPOParseRequest(formData) {
 
 async function initializeBlankMatrix() {
   hideCOPOError();
-  let co_list = ['CO1', 'CO2', 'CO3', 'CO4', 'CO5', 'CO6'];
+  let co_list = ['CO1', 'CO2', 'CO3', 'CO4', 'CO5'];
   try {
     const res = await fetch('/api/get-full-state');
     const state = await res.json();
@@ -145,7 +145,9 @@ function renderMatrixTable() {
     tr.id = `copoRow_${rIdx}`;
     let trHtml = `
       <td class="bold">
-        <input type="text" class="cell-input bold" data-field="co_name" value="${co}" style="width: 95px;" title="Course Outcome name">
+        <input type="text" class="cell-input bold" data-field="co_name" value="${co}" style="width: 95px;" 
+               title="Course Outcome name - click to edit"
+               onchange="updateCORowName(${rIdx}, this.value)">
       </td>
     `;
     currentCOPOState.po_list.forEach((po, cIdx) => {
@@ -165,6 +167,21 @@ function renderMatrixTable() {
     tr.innerHTML = trHtml;
     tbody.appendChild(tr);
   });
+}
+
+function updateCORowName(rIdx, newName) {
+  const clean = newName.trim().toUpperCase();
+  if (!clean) return;
+  const oldName = currentCOPOState.co_list[rIdx];
+  if (oldName === clean) return;
+
+  if (currentCOPOState.matrix[oldName]) {
+    const rowVals = currentCOPOState.matrix[oldName];
+    delete currentCOPOState.matrix[oldName];
+    currentCOPOState.matrix[clean] = rowVals;
+  }
+  currentCOPOState.co_list[rIdx] = clean;
+  renderMatrixTable();
 }
 
 function updatePOColumnName(cIdx, newName) {
@@ -335,6 +352,39 @@ function renderPOResults(data) {
   renderPOCharts(data.po_results);
 }
 
+// Custom Chart.js Plugin: Draw data value on top of each bar
+const barTopValuePlugin = {
+  id: 'barTopValuePlugin',
+  afterDatasetsDraw(chart) {
+    const { ctx, data } = chart;
+    if (chart.config.type !== 'bar') return;
+    ctx.save();
+    chart.data.datasets.forEach((dataset, datasetIndex) => {
+      const meta = chart.getDatasetMeta(datasetIndex);
+      if (meta.hidden) return;
+      meta.data.forEach((bar, index) => {
+        const val = dataset.data[index];
+        if (val === null || val === undefined || val === 0) return;
+        const valStr = typeof val === 'number' ? (Number.isInteger(val) ? val.toString() : val.toFixed(2)) : val.toString();
+        ctx.fillStyle = '#1e293b';
+        ctx.font = 'bold 9.5px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'bottom';
+        ctx.fillText(valStr, bar.x, bar.y - 3);
+      });
+    });
+    ctx.restore();
+  }
+};
+
+if (typeof Chart !== 'undefined' && Chart.register) {
+  try {
+    Chart.register(barTopValuePlugin);
+  } catch (e) {
+    // plugin may already be registered
+  }
+}
+
 function renderPOCharts(po_results) {
   const labels = po_results.map(p => p.po);
   const dataVals = po_results.map(p => p.attainment !== null ? p.attainment : 0);
@@ -357,7 +407,7 @@ function renderPOCharts(po_results) {
       responsive: true,
       maintainAspectRatio: false,
       scales: {
-        y: { beginAtZero: true, max: 3.0, ticks: { stepSize: 0.5 } }
+        y: { beginAtZero: true, max: 3.3, ticks: { stepSize: 0.5 } }
       }
     }
   });
@@ -398,15 +448,25 @@ function renderPOCharts(po_results) {
 window.addEventListener('DOMContentLoaded', async () => {
   try {
     const res = await fetch('/api/get-full-state');
-    const state = await res.json();
-    if (state.copo && state.copo.matrix && Object.keys(state.copo.matrix).length > 0) {
-      currentCOPOState.co_list = state.copo.co_list || Object.keys(state.copo.matrix);
-      currentCOPOState.po_list = state.copo.po_list || [];
-      currentCOPOState.matrix = state.copo.matrix;
+    let state = await res.json();
+    const stored = (typeof getStoredState === 'function') ? getStoredState() : {};
+    
+    let copoData = state.copo;
+    if ((!copoData || !copoData.matrix || Object.keys(copoData.matrix).length === 0) && stored.copo) {
+      copoData = stored.copo;
+      if (typeof syncStateToBackend === 'function') {
+        syncStateToBackend(stored);
+      }
+    }
+
+    if (copoData && copoData.matrix && Object.keys(copoData.matrix).length > 0) {
+      currentCOPOState.co_list = copoData.co_list || Object.keys(copoData.matrix);
+      currentCOPOState.po_list = copoData.po_list || [];
+      currentCOPOState.matrix = copoData.matrix;
       renderMatrixTable();
       document.getElementById('matrixSection').style.display = 'block';
-      if (state.copo.po_results && state.copo.po_results.length > 0) {
-        renderPOResults(state.copo);
+      if (copoData.po_results && copoData.po_results.length > 0) {
+        renderPOResults(copoData);
         document.getElementById('poResultsSection').style.display = 'block';
         document.getElementById('btnGoToStep4').style.display = 'inline-flex';
         const btnPdfTop = document.getElementById('btnCOPOPdfTop');

@@ -690,50 +690,99 @@ def api_upload_copo():
     if not headers:
         return jsonify({'success': False, 'message': 'Uploaded file is empty.'}), 400
 
-    # Determine if headerless numeric matrix:
-    # If first row contains numeric values (e.g. 0, 1, 2, 3), it is headerless!
-    is_headerless = False
-    all_numeric_first_row = True
-    for val in headers:
+    def _is_num(val):
+        s = str(val).strip()
+        if not s:
+            return True
         try:
-            float(val.strip())
+            float(s)
+            return True
         except ValueError:
-            all_numeric_first_row = False
+            return False
+
+    def _is_co_label(val):
+        s = str(val).strip().upper()
+        return bool(re.match(r'^(CO|co)[\s_-]*\d+', s)) or s in ['CO', 'COURSE OUTCOME']
+
+    def _is_po_label(val):
+        s = str(val).strip().upper()
+        return bool(re.match(r'^(PO|po|PSO|pso)[\s_-]*\d+', s)) or 'PO' in s or 'PSO' in s
+
+    # Standard default PO / PSO list: PO1..PO11, PSO1..PSO3 (14 total)
+    def _get_default_po_label(i):
+        if i < 11:
+            return f"PO{i + 1}"
+        else:
+            return f"PSO{i - 10}"
+
+    # Check if first row is pure numbers
+    first_row_numeric = all(_is_num(v) for v in headers if str(v).strip())
+
+    # Check if first column of all data rows is numeric (meaning no CO names in first col)
+    first_col_numeric = True
+    for r in rows:
+        if r and len(r) > 0 and str(r[0]).strip() and not _is_num(r[0]):
+            first_col_numeric = False
             break
 
-    matrix_rows = []
+    is_headerless = False
     co_labels = []
     po_labels = []
+    matrix_dict = {}
 
-    if all_numeric_first_row:
-        # All rows including headers are data rows
+    if first_row_numeric:
+        # Case A: First row has no PO column names (pure numbers)
         all_data_rows = [headers] + rows
         col_count = len(headers)
-        # Assign PO1..PO11, PSO1..PSO3
-        po_labels = [f"PO{i+1}" if i < 11 else f"PSO{i-10}" for i in range(col_count)]
+        
+        # Check if first column was an index/CO number or actual first PO correlation
+        # If col_count == 14, it exactly matches 11 POs + 3 PSOs (PO1-PO11, PSO1-PSO3)
+        # If col_count == 15, col 0 is likely row index/CO and cols 1-14 are POs
+        if col_count == 15 and first_col_numeric:
+            data_cols_start = 1
+            num_po_cols = 14
+        else:
+            data_cols_start = 0
+            num_po_cols = col_count
+
+        po_labels = [_get_default_po_label(i) for i in range(num_po_cols)]
         co_labels = [f"CO{i+1}" for i in range(len(all_data_rows))]
 
-        matrix_dict = {}
         for r_idx, row in enumerate(all_data_rows):
             co_name = co_labels[r_idx]
             matrix_dict[co_name] = {}
             for c_idx, po_name in enumerate(po_labels):
-                val_str = row[c_idx].strip() if c_idx < len(row) else "0"
+                raw_idx = data_cols_start + c_idx
+                val_str = row[raw_idx].strip() if raw_idx < len(row) else "0"
                 try:
                     num_val = float(val_str)
                 except ValueError:
                     num_val = 0.0
                 matrix_dict[co_name][po_name] = num_val
         is_headerless = True
+
     else:
-        # Named matrix
-        # First column is CO name, remaining columns are PO/PSOs
-        po_labels = [h.strip() for h in headers[1:] if h.strip()]
-        matrix_dict = {}
+        # Case B: First row has headers (or user provided header row)
+        # Check if header cells actually look like PO/PSOs
+        raw_po_headers = headers[1:] if len(headers) > 1 else headers
+        valid_po_count = sum(1 for h in raw_po_headers if _is_po_label(h))
+
+        if valid_po_count == 0:
+            # Header row exists but doesn't have recognizable PO names (e.g. generic or blank)
+            po_labels = [_get_default_po_label(i) for i in range(len(raw_po_headers))]
+        else:
+            po_labels = [h.strip().upper() for h in raw_po_headers if h.strip()]
+
         for r_idx, row in enumerate(rows):
-            if not row:
+            if not row or not any(str(c).strip() for c in row):
                 continue
-            co_name = row[0].strip() or f"CO{r_idx + 1}"
+            first_cell = str(row[0]).strip()
+            # If first cell is numeric or empty or doesn't start with CO, assign default CO1..COn
+            if not first_cell or _is_num(first_cell) or not _is_co_label(first_cell):
+                co_name = f"CO{r_idx + 1}"
+            else:
+                co_name = first_cell.upper()
+                
             co_labels.append(co_name)
             matrix_dict[co_name] = {}
             for c_idx, po_name in enumerate(po_labels, start=1):
@@ -743,6 +792,13 @@ def api_upload_copo():
                 except ValueError:
                     num_val = 0.0
                 matrix_dict[co_name][po_name] = num_val
+
+    # If co_labels is empty, provide default CO1-CO5
+    if not co_labels:
+        co_labels = [f"CO{i+1}" for i in range(5)]
+        po_labels = [_get_default_po_label(i) for i in range(14)]
+        for co in co_labels:
+            matrix_dict[co] = {po: 0.0 for po in po_labels}
 
     TEMP_DATA_STORE[sid]['copo_mapping'] = {
         'co_list': co_labels,
