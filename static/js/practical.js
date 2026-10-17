@@ -725,9 +725,12 @@ async function calculateDirectAttainment() {
     displayDirectResults(result.data);
     showDirectSuccess('✓ Direct laboratory attainment calculated successfully! All experiments have been aggregated by Course Outcome.');
     
-    // Auto sync state for serverless persistence
-    if (typeof syncFullStateToBackend === 'function') {
-      syncFullStateToBackend();
+    // Auto sync state for serverless persistence across pages
+    if (typeof saveStoredState === 'function') {
+      saveStoredState({ direct: { data: result.data } });
+    }
+    if (typeof syncStateToBackend === 'function') {
+      syncStateToBackend();
     }
 
     setTimeout(() => {
@@ -745,27 +748,42 @@ async function calculateDirectAttainment() {
 
 function displayDirectResults(data) {
   document.getElementById('directResultsSection').style.display = 'block';
-  document.getElementById('btnGoToStep3').style.display = 'inline-block';
-  document.getElementById('btnPage2PdfTop').style.display = 'inline-block';
+  const btnTop = document.getElementById('btnGoToStep3');
+  if (btnTop) btnTop.style.display = 'inline-flex';
+  const btnPdfTop = document.getElementById('btnPage2PdfTop');
+  if (btnPdfTop) btnPdfTop.style.display = 'inline-flex';
+  const nextBar = document.getElementById('directNextActionBar');
+  if (nextBar) nextBar.style.display = 'flex';
 
-  document.getElementById('statDirectAppeared').textContent = data.total_students_evaluated;
-  document.getElementById('statDirectPassed').textContent = `${data.total_students_passed} (${data.overall_percentage}%)`;
-  document.getElementById('statDirectAvgScore').textContent = `${data.overall_percentage}%`;
-  document.getElementById('statDirectCOCount').textContent = data.all_cos ? data.all_cos.length : 0;
+  const total = data.total_students || 0;
+  const passed = data.overall_passed_students !== undefined ? data.overall_passed_students : 0;
+  const passPct = total > 0 ? Math.round((passed / total) * 100) : 0;
+  const avgPct = data.avg_student_pct !== undefined ? data.avg_student_pct : 0;
+
+  document.getElementById('statDirectAppeared').textContent = total;
+  document.getElementById('statDirectPassed').textContent = `${passed} (${passPct}%)`;
+  document.getElementById('statDirectAvgScore').textContent = `${avgPct}%`;
+  document.getElementById('statDirectCOCount').textContent = data.all_cos ? data.all_cos.length : (data.co_summaries ? data.co_summaries.length : 0);
 
   // Direct CO Summary Table
   const tbodyCO = document.getElementById('directCOSummaryTable').querySelector('tbody');
   tbodyCO.innerHTML = '';
   (data.co_summaries || []).forEach(co => {
+    const mappedStr = Array.isArray(co.mapped_assessments)
+      ? co.mapped_assessments.join(', ')
+      : (co.mapped_assessments || '-');
+    const intAtt = co.has_internal ? `${co.internal_attainment}` : (co.internal_attainment !== null && co.internal_attainment !== undefined ? `${co.internal_attainment}` : '<span style="color:#94a3b8;">-</span>');
+    const eseAtt = co.has_ese ? `${co.ese_attainment}` : (co.ese_attainment !== null && co.ese_attainment !== undefined ? `${co.ese_attainment}` : '<span style="color:#94a3b8;">-</span>');
+
     const tr = document.createElement('tr');
     tr.innerHTML = `
-      <td><strong>${co.co}</strong></td>
-      <td>${co.mapped_assessments.join(', ')}</td>
-      <td>${co.pass_percentage}%</td>
-      <td><strong>${co.internal_attainment !== null ? co.internal_attainment : '-'}</strong></td>
-      <td><strong>${co.ese_attainment !== null ? co.ese_attainment : '-'}</strong></td>
-      <td style="font-weight: 700; color: var(--accent);">${co.attainment}</td>
-      <td>${getBadgeHtml(co.level_label)}</td>
+      <td class="bold"><strong>${co.co}</strong></td>
+      <td>${mappedStr}</td>
+      <td class="text-center bold">${co.pass_percentage}%</td>
+      <td class="text-center bold" style="color:#b45309; font-size:14px; background:#fffbeb;">${intAtt}</td>
+      <td class="text-center bold" style="color:#6d28d9; font-size:14px; background:#f5f3ff;">${eseAtt}</td>
+      <td class="text-center bold" style="color:var(--accent); font-size:14px; background:#f0f9ff;">${co.attainment}</td>
+      <td class="text-center">${getBadgeHtml(co.level_label)}</td>
     `;
     tbodyCO.appendChild(tr);
   });
@@ -774,19 +792,21 @@ function displayDirectResults(data) {
   const tbodyAssess = document.getElementById('assessmentSummaryTable').querySelector('tbody');
   tbodyAssess.innerHTML = '';
   (data.assessment_summaries || []).forEach(a => {
+    const minM = a.min_marks !== undefined ? a.min_marks : (a.min_scored !== undefined ? a.min_scored : '-');
+    const maxM = a.max_marks_scored !== undefined ? a.max_marks_scored : (a.max_scored !== undefined ? a.max_scored : '-');
     const tr = document.createElement('tr');
     tr.innerHTML = `
-      <td><strong>${a.name}</strong></td>
+      <td class="bold"><strong>${a.name}</strong></td>
       <td>${a.mapped_cos}</td>
-      <td>${a.max_marks}</td>
-      <td>${a.passing_mark}</td>
-      <td>${a.appeared}</td>
-      <td>${a.passed}</td>
-      <td>${a.failed}</td>
-      <td><strong>${a.pass_pct}%</strong></td>
-      <td>${a.avg_marks}</td>
-      <td>${a.min_scored}</td>
-      <td>${a.max_scored}</td>
+      <td class="text-center">${a.max_marks}</td>
+      <td class="text-center">${a.passing_mark}</td>
+      <td class="text-center">${a.appeared}</td>
+      <td class="text-center">${a.passed}</td>
+      <td class="text-center">${a.failed}</td>
+      <td class="text-center bold"><strong>${a.pass_pct}%</strong></td>
+      <td class="text-center">${a.avg_marks}</td>
+      <td class="text-center">${minM}</td>
+      <td class="text-center">${maxM}</td>
     `;
     tbodyAssess.appendChild(tr);
   });
@@ -794,15 +814,17 @@ function displayDirectResults(data) {
   // Student-wise table
   const tbodyStud = document.getElementById('studentSummaryTable').querySelector('tbody');
   tbodyStud.innerHTML = '';
-  (data.students_summary || []).forEach((st, idx) => {
+  const studentsList = data.students || data.students_summary || [];
+  studentsList.forEach((st, idx) => {
+    const passedCOsStr = Array.isArray(st.passed_cos) ? st.passed_cos.join(', ') : (st.passed_cos || 'None');
     const tr = document.createElement('tr');
     tr.innerHTML = `
-      <td>${idx + 1}</td>
+      <td class="text-center bold">${idx + 1}</td>
       <td>${st.roll_no}</td>
       <td>${st.name}</td>
-      <td>${st.total_obtained} / ${st.total_max}</td>
-      <td><strong>${st.percentage}%</strong></td>
-      <td>${st.passed_cos.join(', ') || 'None'}</td>
+      <td class="text-center">${st.total_obtained} / ${st.total_max}</td>
+      <td class="text-center bold"><strong>${st.percentage}%</strong></td>
+      <td>${passedCOsStr || 'None'}</td>
     `;
     tbodyStud.appendChild(tr);
   });
@@ -816,7 +838,7 @@ function displayDirectResults(data) {
 // =========================================================================
 
 function renderDirectCharts(data) {
-  const cos = data.all_cos || [];
+  const cos = data.all_cos || (data.co_summaries || []).map(c => c.co);
   const passPercentages = (data.co_summaries || []).map(c => c.pass_percentage);
   const attainmentPoints = (data.co_summaries || []).map(c => c.attainment);
 
@@ -828,7 +850,8 @@ function renderDirectCharts(data) {
 
   // Chart 3: Score Distribution
   const dist = [0, 0, 0, 0];
-  (data.students_summary || []).forEach(s => {
+  const studentsList = data.students || data.students_summary || [];
+  studentsList.forEach(s => {
     const p = s.percentage;
     if (p < 50) dist[0]++;
     else if (p < 65) dist[1]++;
@@ -998,28 +1021,40 @@ function displayWeightedResults(data) {
   document.getElementById('combinedAttainmentSection').style.display = 'block';
   document.getElementById('overallCombinedBadge').textContent = `Overall Course Attainment: ${data.overall_attainment} / 3.00 (${data.overall_level_label})`;
 
+  // Save to stored state for persistence
+  if (typeof saveStoredState === 'function') {
+    saveStoredState({ weighted: { data: data } });
+  }
+  if (typeof syncStateToBackend === 'function') {
+    syncStateToBackend();
+  }
+
   const tbody = document.getElementById('combinedAttainmentTable').querySelector('tbody');
   tbody.innerHTML = '';
-  (data.co_attainments || []).forEach(co => {
+  const resultsList = data.combined_results || data.co_attainments || [];
+  resultsList.forEach(co => {
+    const dPct = co.direct_pct !== undefined ? co.direct_pct : (co.direct_percentage || 0);
+    const iPct = co.indirect_pct !== undefined ? co.indirect_pct : (co.indirect_percentage || 0);
+    const cPct = co.combined_pct !== undefined ? co.combined_pct : (co.combined_percentage || 0);
     const tr = document.createElement('tr');
     tr.innerHTML = `
       <td><strong>${co.co}</strong></td>
-      <td>${co.direct_percentage}%</td>
-      <td>${co.direct_attainment}</td>
-      <td>${co.indirect_percentage !== null ? co.indirect_percentage + '%' : 'N/A'}</td>
-      <td>${co.indirect_attainment !== null ? co.indirect_attainment : 'N/A'}</td>
-      <td><strong>${co.combined_percentage}%</strong></td>
-      <td style="font-weight: 700; color: var(--accent);">${co.combined_attainment}</td>
-      <td>${getBadgeHtml(co.level_label)}</td>
+      <td class="text-center">${dPct}%</td>
+      <td class="text-center bold">${co.direct_attainment}</td>
+      <td class="text-center">${co.indirect_attainment !== null && co.indirect_attainment !== undefined ? iPct + '%' : 'N/A'}</td>
+      <td class="text-center bold">${co.indirect_attainment !== null && co.indirect_attainment !== undefined ? co.indirect_attainment : 'N/A'}</td>
+      <td class="text-center"><strong>${cPct}%</strong></td>
+      <td class="text-center bold" style="color: var(--accent);">${co.combined_attainment}</td>
+      <td class="text-center">${getBadgeHtml(co.level_label)}</td>
     `;
     tbody.appendChild(tr);
   });
 
   // Render combined comparison chart
-  const cos = (data.co_attainments || []).map(c => c.co);
-  const dAtts = (data.co_attainments || []).map(c => c.direct_attainment);
-  const iAtts = (data.co_attainments || []).map(c => c.indirect_attainment || 0);
-  const cAtts = (data.co_attainments || []).map(c => c.combined_attainment);
+  const cos = resultsList.map(c => c.co);
+  const dAtts = resultsList.map(c => c.direct_attainment);
+  const iAtts = resultsList.map(c => c.indirect_attainment || 0);
+  const cAtts = resultsList.map(c => c.combined_attainment);
 
   const canvas = document.getElementById('chartCombinedAttainment');
   if (canvas) {

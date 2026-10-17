@@ -19,7 +19,7 @@
         <span class="step-badge">1</span> Teacher &amp; Course
       </a>
       <span class="step-divider">&rarr;</span>
-      <a href="{{ url_for('page2_assessment') }}" class="step-item {% if page_step == 2 %}active{% endif %}">
+      <a href="{% if teacher and teacher.course_type == 'practical' %}{{ url_for('page2_practical') }}{% else %}{{ url_for('page2_assessment') }}{% endif %}" class="step-item {% if page_step == 2 %}active{% endif %}">
         <span class="step-badge">2</span> Assessment Data
       </a>
       <span class="step-divider">&rarr;</span>
