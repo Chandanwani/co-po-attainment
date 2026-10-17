@@ -99,7 +99,8 @@ def create_word_report(report_data: Dict[str, Any]) -> io.BytesIO:
     # Title
     title_p = doc.add_paragraph()
     title_p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    run_t = title_p.add_run("COURSE OUTCOME & PROGRAM OUTCOME ATTAINMENT REPORT")
+    doc_title = "LABORATORY COURSE OUTCOME & PROGRAM OUTCOME ATTAINMENT REPORT" if teacher.get("course_type") == "practical" else "COURSE OUTCOME & PROGRAM OUTCOME ATTAINMENT REPORT"
+    run_t = title_p.add_run(doc_title)
     run_t.font.name = "Arial"
     run_t.font.size = Pt(15)
     run_t.font.bold = True
@@ -107,7 +108,8 @@ def create_word_report(report_data: Dict[str, Any]) -> io.BytesIO:
 
     sub_p = doc.add_paragraph()
     sub_p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    run_s = sub_p.add_run(f"Subject: {teacher.get('subject', 'N/A')}  |  Academic Year: {teacher.get('academic_year', 'N/A')}")
+    course_type_str = f"Practical (Batch: {teacher.get('batch')})" if teacher.get("course_type") == "practical" and teacher.get("batch") else ("Practical" if teacher.get("course_type") == "practical" else "Theory")
+    run_s = sub_p.add_run(f"Subject: {teacher.get('subject', 'N/A')}  |  Type: {course_type_str}  |  Academic Year: {teacher.get('academic_year', 'N/A')}")
     run_s.font.size = Pt(10.5)
     run_s.font.color.rgb = RGBColor(100, 116, 139)
 
@@ -118,15 +120,16 @@ def create_word_report(report_data: Dict[str, Any]) -> io.BytesIO:
     h1_run = h1.add_run("1. Course & Faculty Details")
     h1_run.font.color.rgb = RGBColor(30, 41, 59)
 
-    table_meta = doc.add_table(rows=6, cols=2)
     meta_info = [
         ("Faculty Name", teacher.get("faculty_name", "N/A")),
         ("Subject Name / Code", teacher.get("subject", "N/A")),
+        ("Course Nature & Batch", course_type_str),
         ("Class & Division", f"{teacher.get('class_name', 'N/A')} - Div {teacher.get('division', 'N/A')}"),
         ("Semester", teacher.get("semester", "N/A")),
         ("Weightage Setup", f"Direct: {weighted.get('direct_weight', 80)}%  |  Indirect: {weighted.get('indirect_weight', 20)}%"),
         ("Overall Attainment", f"{weighted.get('overall_attainment', 'N/A')} / 3.00  ({weighted.get('overall_level_label', 'N/A')})")
     ]
+    table_meta = doc.add_table(rows=len(meta_info), cols=2)
     for r_idx, (k, v) in enumerate(meta_info):
         r = table_meta.rows[r_idx]
         cell_k, cell_v = r.cells[0], r.cells[1]

@@ -93,6 +93,8 @@ def load_session_state(sid: str) -> Dict[str, Any]:
         'teacher': {
             'faculty_name': '',
             'subject': '',
+            'course_type': 'theory',
+            'batch': '',
             'class_name': '',
             'division': '',
             'semester': '',
@@ -201,7 +203,7 @@ def page1_teacher():
         session['sid'] = secrets.token_hex(16)
         sid = session['sid']
         TEMP_DATA_STORE[sid] = {
-            'teacher': {'faculty_name': '', 'subject': '', 'class_name': '', 'division': '', 'semester': '', 'academic_year': ''},
+            'teacher': {'faculty_name': '', 'subject': '', 'course_type': 'theory', 'batch': '', 'class_name': '', 'division': '', 'semester': '', 'academic_year': ''},
             'direct_raw': None, 'direct_computed': None, 'indirect_raw': None, 'indirect_computed': None,
             'weighted_computed': None, 'copo_mapping': None, 'copo_computed': None
         }
@@ -259,7 +261,7 @@ def api_reset_session():
     session['sid'] = secrets.token_hex(16)
     sid = session['sid']
     TEMP_DATA_STORE[sid] = {
-        'teacher': {'faculty_name': '', 'subject': '', 'class_name': '', 'division': '', 'semester': '', 'academic_year': ''},
+        'teacher': {'faculty_name': '', 'subject': '', 'course_type': 'theory', 'batch': '', 'class_name': '', 'division': '', 'semester': '', 'academic_year': ''},
         'direct_raw': None, 'direct_computed': None, 'indirect_raw': None, 'indirect_computed': None,
         'weighted_computed': None, 'copo_mapping': None, 'copo_computed': None
     }
@@ -277,9 +279,16 @@ def api_save_teacher():
     if not faculty_name or not subject:
         return jsonify({'success': False, 'message': 'Faculty name and Subject are required.'}), 400
 
+    course_type = data.get('course_type', 'theory').strip().lower()
+    if course_type not in ['theory', 'practical']:
+        course_type = 'theory'
+    batch = data.get('batch', '').strip() if course_type == 'practical' else ''
+
     teacher_info = {
         'faculty_name': faculty_name,
         'subject': subject,
+        'course_type': course_type,
+        'batch': batch,
         'class_name': data.get('class_name', '').strip(),
         'division': data.get('division', '').strip(),
         'semester': data.get('semester', '').strip(),
@@ -415,6 +424,9 @@ def api_upload_direct():
         sr_col_idx = None
         roll_col_idx = None
         name_col_idx = None
+        batch_col_idx = None
+
+        batch_keywords = {'batch', 'batch no', 'batch no.', 'batch_no', 'lab batch', 'batch_id'}
 
         for i, h in enumerate(h_lower):
             is_exam = any(kw in h for kw in exam_keywords)
@@ -429,13 +441,16 @@ def api_upload_direct():
             if name_col_idx is None and (h in name_exact or 'name' in h):
                 name_col_idx = i
                 continue
+            if batch_col_idx is None and (h in batch_keywords or 'batch' in h):
+                batch_col_idx = i
+                continue
 
         # If no explicit roll column was found, but a serial number column was found, use it as roll_col_idx
         if roll_col_idx is None and sr_col_idx is not None:
             roll_col_idx = sr_col_idx
 
         meta_indices = set()
-        for idx in [sr_col_idx, roll_col_idx, name_col_idx]:
+        for idx in [sr_col_idx, roll_col_idx, name_col_idx, batch_col_idx]:
             if idx is not None:
                 meta_indices.add(idx)
 
@@ -477,14 +492,22 @@ def api_upload_direct():
             else:
                 name = f"Student {r_idx}"
 
+            s_batch = row[batch_col_idx].strip() if batch_col_idx is not None and batch_col_idx < len(row) else ""
+
             marks = {}
             for i in active_col_indices:
                 h_name = headers[i] if headers[i].strip() else f"Assessment_{i+1}"
                 marks[h_name] = row[i].strip() if i < len(row) else ""
-            students_list.append({'roll_no': roll, 'name': name, 'marks': marks})
+            student_rec = {'roll_no': roll, 'name': name, 'marks': marks}
+            if s_batch:
+                student_rec['batch'] = s_batch
+            students_list.append(student_rec)
 
     # Build smart default column configurations for each assessment
     standard_ceilings = [5.0, 10.0, 15.0, 20.0, 25.0, 30.0, 40.0, 50.0, 60.0, 70.0, 75.0, 80.0, 100.0]
+
+    teacher_info = TEMP_DATA_STORE.get(sid, {}).get('teacher', {})
+    is_practical_course = teacher_info.get('course_type') == 'practical'
 
     for idx, col_name in enumerate(assessment_cols, start=1):
         col_lower = col_name.lower()
@@ -502,10 +525,12 @@ def api_upload_direct():
 
         max_observed = max(numeric_marks) if numeric_marks else 0.0
 
-        # Check if column name has explicit max marks in parentheses, e.g. "CCE1 (10)" -> 10.0
+        # Check if column name has explicit max marks in parentheses, e.g. "CCE1 (10)" -> 10.0, "Exp 1 (25)" -> 25.0
         m_max = re.search(r'\(\s*(\d+(?:\.\d+)?)\s*\)', col_name) or re.search(r'out\s*of\s*(\d+(?:\.\d+)?)', col_name, re.I)
         if m_max:
             base_max = float(m_max.group(1))
+        elif 'exp' in col_lower or 'prac' in col_lower or 'lab' in col_lower:
+            base_max = 25.0
         elif 'cce' in col_lower or 'quiz' in col_lower or 'assign' in col_lower:
             base_max = 10.0
         elif 'ut' in col_lower or 'unit' in col_lower or 'test' in col_lower:
@@ -514,8 +539,12 @@ def api_upload_direct():
             base_max = 30.0
         elif 'prelim' in col_lower or 'pre' in col_lower:
             base_max = 50.0
-        elif 'ese' in col_lower or 'end' in col_lower or 'sem' in col_lower:
+        elif 'ese' in col_lower or 'end' in col_lower or 'univ' in col_lower:
             base_max = 100.0
+        elif 'oral' in col_lower or 'pr/or' in col_lower or 'viva' in col_lower:
+            base_max = 50.0
+        elif is_practical_course:
+            base_max = 25.0
         else:
             base_max = 20.0
 
@@ -529,18 +558,31 @@ def api_upload_direct():
             else:
                 def_max = float(math.ceil(max_observed / 10.0) * 10)
 
-        # Auto assign default CO (e.g. UT1 -> CO1, UT2 -> CO2 or sequential)
-        m_co = re.search(r'\d+', col_name)
-        if m_co:
-            def_co = f"CO{m_co.group()}"
+        # Smart CO assignment:
+        # For Practical/Experiments: Exp 1-2 -> CO1, Exp 3-4 -> CO2, Exp 5-6 -> CO3, Exp 7-8 -> CO4, Exp 9-10 -> CO5
+        m_exp = re.search(r'exp(?:eriment)?\s*(\d+)', col_name, re.I)
+        if m_exp:
+            exp_num = int(m_exp.group(1))
+            co_num = min(6, ((exp_num - 1) // 2) + 1)
+            mapped_cos = [f"CO{co_num}"]
+        elif 'oral' in col_lower or 'pr/or' in col_lower or 'final' in col_lower:
+            mapped_cos = ['CO1', 'CO2', 'CO3', 'CO4', 'CO5']
         else:
-            def_co = f"CO{((idx - 1) % 6) + 1}"
+            m_co = re.search(r'co\s*(\d+)', col_name, re.I)
+            if m_co:
+                mapped_cos = [f"CO{m_co.group(1)}"]
+            else:
+                m_num = re.search(r'\d+', col_name)
+                if m_num:
+                    mapped_cos = [f"CO{m_num.group()}"]
+                else:
+                    mapped_cos = [f"CO{((idx - 1) % 6) + 1}"]
 
         column_configs.append({
             'name': col_name,
             'checked': True,
             'max_marks': def_max,
-            'mapped_cos': [def_co]
+            'mapped_cos': mapped_cos
         })
 
     TEMP_DATA_STORE[sid]['direct_raw'] = {

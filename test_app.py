@@ -508,6 +508,115 @@ def test_below_60_percent_level_assignment_and_gapc_lookup():
     assert co1['level_label'] == "Level 1.7"
 
 
+def test_practical_course_workflow():
+    """Verify practical course flow: batch saving, multi-experiment CO mapping, and export titles."""
+    client = app.test_client()
+    
+    # 1. Save practical course with batch
+    res_t = client.post('/api/save-teacher', json={
+        'faculty_name': 'Dr. S. K. Patil',
+        'subject': 'Database Management Systems Lab (CS304PR)',
+        'class_name': 'Third Year B.Tech',
+        'division': 'B',
+        'semester': 'V',
+        'academic_year': '2025-2026',
+        'course_type': 'practical',
+        'batch': 'Batch 2'
+    })
+    assert res_t.status_code == 200
+    assert res_t.get_json()['success'] is True
+    
+    # Check session
+    with client.session_transaction() as sess:
+        assert sess['teacher']['course_type'] == 'practical'
+        assert sess['teacher']['batch'] == 'Batch 2'
+
+    # 2. Build 10 experiments (2 per CO) and PR/OR exam
+    col_configs = [
+        {'name': 'Exp 1', 'max_marks': 25, 'mapped_cos': ['CO1'], 'checked': True},
+        {'name': 'Exp 2', 'max_marks': 25, 'mapped_cos': ['CO1'], 'checked': True},
+        {'name': 'Exp 3', 'max_marks': 25, 'mapped_cos': ['CO2'], 'checked': True},
+        {'name': 'Exp 4', 'max_marks': 25, 'mapped_cos': ['CO2'], 'checked': True},
+        {'name': 'Exp 5', 'max_marks': 25, 'mapped_cos': ['CO3'], 'checked': True},
+        {'name': 'Exp 6', 'max_marks': 25, 'mapped_cos': ['CO3'], 'checked': True},
+        {'name': 'Exp 7', 'max_marks': 25, 'mapped_cos': ['CO4'], 'checked': True},
+        {'name': 'Exp 8', 'max_marks': 25, 'mapped_cos': ['CO4'], 'checked': True},
+        {'name': 'Exp 9', 'max_marks': 25, 'mapped_cos': ['CO5'], 'checked': True},
+        {'name': 'Exp 10', 'max_marks': 25, 'mapped_cos': ['CO5'], 'checked': True},
+        {'name': 'PR/OR Exam', 'max_marks': 25, 'mapped_cos': ['CO1', 'CO2', 'CO3', 'CO4', 'CO5'], 'checked': True},
+    ]
+
+    students = [
+        {
+            'roll_no': f'10{i}',
+            'name': f'Student {i}',
+            'marks': {
+                'Exp 1': 20, 'Exp 2': 22,
+                'Exp 3': 18, 'Exp 4': 19,
+                'Exp 5': 21, 'Exp 6': 23,
+                'Exp 7': 17, 'Exp 8': 20,
+                'Exp 9': 22, 'Exp 10': 24,
+                'PR/OR Exam': 20
+            }
+        }
+        for i in range(1, 11)
+    ]
+
+    res_comp = client.post('/api/compute-direct', json={
+        'students': students,
+        'column_configs': col_configs,
+        'passing_threshold_ratio': 0.50
+    })
+    assert res_comp.status_code == 200
+    comp_json = res_comp.get_json()
+    assert comp_json['success'] is True
+    co_summaries = comp_json['data']['co_summaries']
+    assert len(co_summaries) == 5
+    # All 10 students scored >= 50% on all COs
+    for co in co_summaries:
+        assert co['pass_percentage'] == 100.0
+        assert co['attainment'] == 3.0
+
+    # 3. Test PDF generation for practical
+    teacher_meta = {
+        'faculty_name': 'Dr. S. K. Patil',
+        'subject': 'DBMS Lab',
+        'class_name': 'TY B.Tech',
+        'division': 'B',
+        'semester': 'V',
+        'academic_year': '2025-2026',
+        'course_type': 'practical',
+        'batch': 'Batch 2'
+    }
+    rep_data = {
+        'teacher': teacher_meta,
+        'direct': {'data': comp_json['data']},
+        'indirect': {'data': {'co_summaries': [{'co': f'CO{i}', 'attainment': 2.8} for i in range(1, 6)]}},
+        'weighted': {'data': {'overall_attainment': 2.96, 'overall_level_label': 'Level 3', 'direct_weight': 80, 'indirect_weight': 20, 'co_attainments': []}},
+        'copo': {'po_results': [], 'matrix': {}}
+    }
+    pdf_buf = create_pdf_report(rep_data, include_charts=False)
+    assert len(pdf_buf.getvalue()) > 1000
+
+    # 4. Test Excel generation with practical metadata
+    excel_buf = create_complete_excel_report(rep_data)
+    wb = openpyxl.load_workbook(excel_buf)
+    ws_info = wb['Course & Faculty Info']
+    assert "LABORATORY" in ws_info["A4"].value
+    found_batch = False
+    for r in range(1, 20):
+        val = ws_info.cell(row=r, column=2).value
+        if val and "Practical" in str(val) and "Batch 2" in str(val):
+            found_batch = True
+            break
+    assert found_batch, "Practical batch not found in Excel report!"
+
+    # 5. Test Word doc generation with practical metadata
+    docx_buf = create_word_report(rep_data)
+    doc = Document(docx_buf)
+    assert any("LABORATORY" in p.text for p in doc.paragraphs)
+
+
 if __name__ == '__main__':
     test_gapc_attainment_formula()
     print("[PASS] test_gapc_attainment_formula")
@@ -539,4 +648,6 @@ if __name__ == '__main__':
     print("[PASS] test_flask_routes_and_navigation")
     test_below_60_percent_level_assignment_and_gapc_lookup()
     print("[PASS] test_below_60_percent_level_assignment_and_gapc_lookup")
-    print("\nALL 15 TEST SUITES PASSED SUCCESSFULLY!")
+    test_practical_course_workflow()
+    print("[PASS] test_practical_course_workflow")
+    print("\nALL 16 TEST SUITES PASSED SUCCESSFULLY!")

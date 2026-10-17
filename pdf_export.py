@@ -90,7 +90,11 @@ def build_two_line_teacher_box(teacher: Dict[str, Any], overall_att: str, overal
         except (ValueError, TypeError):
             att_display = f"{overall_att} &bull; {overall_lvl}"
 
-    line1 = f"<b>Faculty:</b> {f_name} &nbsp;&nbsp;|&nbsp;&nbsp; <b>Course:</b> {subj} &nbsp;&nbsp;|&nbsp;&nbsp; <b>Class:</b> {cls_div}"
+    course_type = teacher.get('course_type', 'theory')
+    batch = teacher.get('batch', '')
+    type_str = f"Practical ({batch})" if (course_type == 'practical' and batch) else ("Practical" if course_type == 'practical' else "Theory")
+
+    line1 = f"<b>Faculty:</b> {f_name} &nbsp;&nbsp;|&nbsp;&nbsp; <b>Course:</b> {subj} &nbsp;&nbsp;|&nbsp;&nbsp; <b>Type:</b> {type_str} &nbsp;&nbsp;|&nbsp;&nbsp; <b>Class:</b> {cls_div}"
     line2 = f"<b>Academic Year:</b> {ay} &nbsp;&nbsp;|&nbsp;&nbsp; <b>Semester:</b> {sem} &nbsp;&nbsp;|&nbsp;&nbsp; <b>Overall Attainment:</b> <font color='#1E3A8A'><b>{att_display}</b></font>"
 
     t_data = [
@@ -384,8 +388,12 @@ def create_pdf_report(report_data: Dict[str, Any], include_charts: bool = True, 
     elements.extend(build_institution_header(styles))
 
     # 2. Document Title (Context-sensitive)
+    course_type = teacher.get('course_type', 'theory')
     if section == "assessment":
-        doc_title = "DIRECT ASSESSMENT &amp; COURSE OUTCOME (CO) ATTAINMENT REPORT"
+        if course_type == 'practical':
+            doc_title = "DIRECT LABORATORY ASSESSMENT &amp; COURSE OUTCOME (CO) ATTAINMENT REPORT"
+        else:
+            doc_title = "DIRECT ASSESSMENT &amp; COURSE OUTCOME (CO) ATTAINMENT REPORT"
     elif section == "copo":
         doc_title = "CO-PO MAPPING &amp; PROGRAM OUTCOME (PO) ATTAINMENT REPORT"
     else:

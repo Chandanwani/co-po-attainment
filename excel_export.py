@@ -92,7 +92,10 @@ def create_complete_excel_report(report_data: Dict[str, Any]) -> io.BytesIO:
     ws_info["A2"] = "Approved by AICTE, Recognized by DTE, Affiliated to SPPU, Accredited by NAAC with 'A' Grade, NBA Accredited, Autonomous AY 2024-25"
     ws_info["A2"].font = Font(name="Calibri", size=9, italic=True, color="475569")
 
-    ws_info["A4"] = "CO-PO ATTAINMENT EVALUATION REPORT"
+    if teacher.get("course_type") == "practical":
+        ws_info["A4"] = "LABORATORY CO-PO ATTAINMENT EVALUATION REPORT"
+    else:
+        ws_info["A4"] = "CO-PO ATTAINMENT EVALUATION REPORT"
     ws_info["A4"].font = TITLE_FONT
     ws_info.merge_cells("A4:D4")
     ws_info["A4"].alignment = Alignment(horizontal="left", vertical="center")
@@ -118,9 +121,12 @@ def create_complete_excel_report(report_data: Dict[str, Any]) -> io.BytesIO:
     if not cur_overall_lvl or cur_overall_lvl == 'N/A':
         cur_overall_lvl = fallback_lvl
 
+    course_type_str = f"Practical (Batch: {teacher.get('batch')})" if teacher.get("course_type") == "practical" and teacher.get("batch") else ("Practical" if teacher.get("course_type") == "practical" else "Theory")
+
     meta_rows = [
         ("Faculty Name", teacher.get("faculty_name", "N/A")),
         ("Subject Name & Code", teacher.get("subject", "N/A")),
+        ("Course Nature & Batch", course_type_str),
         ("Class", teacher.get("class_name", "N/A")),
         ("Division", teacher.get("division", "N/A")),
         ("Semester", teacher.get("semester", "N/A")),
