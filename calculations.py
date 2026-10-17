@@ -835,7 +835,7 @@ def categorize_slow_fast_learners(
             is_slow = (score < slow_threshold_marks)
 
         if is_fast:
-            record['category'] = 'Fast Learner'
+            record['category'] = 'Advanced Learner'
             record['action_plan'] = 'Advanced assignments, peer tutoring, research/hackathon projects'
             fast_learners.append(record)
         elif is_slow:
@@ -861,14 +861,19 @@ def categorize_slow_fast_learners(
         'target_max_marks': target_max_marks,
         'slow_threshold_pct': slow_threshold_pct,
         'fast_threshold_pct': fast_threshold_pct,
+        'advanced_threshold_pct': fast_threshold_pct,
         'slow_threshold_marks': slow_threshold_marks,
         'fast_threshold_marks': fast_threshold_marks,
+        'advanced_threshold_marks': fast_threshold_marks,
         'total_evaluated': len(students),
+        'advanced_count': len(fast_learners),
+        'advanced_pct': round((len(fast_learners) / len(students) * 100.0) if students else 0.0, 1),
         'fast_count': len(fast_learners),
         'fast_pct': round((len(fast_learners) / len(students) * 100.0) if students else 0.0, 1),
         'slow_count': len(slow_learners),
         'slow_pct': round((len(slow_learners) / len(students) * 100.0) if students else 0.0, 1),
         'other_count': len(other_learners),
+        'advanced_learners': fast_learners,
         'fast_learners': fast_learners,
         'slow_learners': slow_learners
     }

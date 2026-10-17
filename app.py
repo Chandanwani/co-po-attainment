@@ -407,35 +407,64 @@ def api_upload_direct():
         assessment_cols = assessments_set
     else:
         # Wide format
-        # Detect whether Roll and/or Name columns exist
+        # Detect whether Serial No, Roll No, and/or Name columns exist
+        sr_keywords = {'sr', 'sr.', 'sr. no', 'sr. no.', 'sr no', 'sr no.', 'sr_no', 's.no', 's.no.', 'sno', 'serial no', 'serial no.', 'serial_no', 'sl no', 'sl. no', 'slno'}
+        roll_exact = {'roll', 'roll no', 'roll no.', 'roll_no', 'rollno', 'seat no', 'seat no.', 'seat_no', 'prn', 'prn no', 'prn_no', 'urn', 'reg no', 'reg_no', 'registration', 'enrollment', 'enroll', 'student_id', 'ar no', 'ar. no', 'ar_no', 'arno'}
+        name_exact = {'name', 'student name', 'candidate name', 'student_name', 'student', 'candidate'}
+
+        sr_col_idx = None
         roll_col_idx = None
         name_col_idx = None
 
         for i, h in enumerate(h_lower):
             is_exam = any(kw in h for kw in exam_keywords)
-            # Only consider as roll/name if it's NOT an obvious exam/assessment column
-            if not is_exam and roll_col_idx is None:
-                if any(kw in h for kw in roll_keywords) or h in roll_exact:
-                    roll_col_idx = i
-                    continue
-            if not is_exam and name_col_idx is None:
-                if any(kw in h for kw in name_keywords):
-                    name_col_idx = i
-                    continue
+            if is_exam:
+                continue
+            if sr_col_idx is None and (h in sr_keywords or re.match(r'^sr[\s._]*no', h)):
+                sr_col_idx = i
+                continue
+            if roll_col_idx is None and (h in roll_exact or 'roll' in h or 'seat' in h or 'prn' in h or 'arno' in h or 'ar_no' in h or re.match(r'^ar[\s._]*no', h)):
+                roll_col_idx = i
+                continue
+            if name_col_idx is None and (h in name_exact or 'name' in h):
+                name_col_idx = i
+                continue
+
+        # If no explicit roll column was found, but a serial number column was found, use it as roll_col_idx
+        if roll_col_idx is None and sr_col_idx is not None:
+            roll_col_idx = sr_col_idx
 
         meta_indices = set()
-        if roll_col_idx is not None:
-            meta_indices.add(roll_col_idx)
-        if name_col_idx is not None:
-            meta_indices.add(name_col_idx)
+        for idx in [sr_col_idx, roll_col_idx, name_col_idx]:
+            if idx is not None:
+                meta_indices.add(idx)
 
-        # Assessment columns are all remaining columns (or all columns if none matched)
-        assessment_cols = [headers[i] for i in range(len(headers)) if i not in meta_indices]
-        if not assessment_cols:
-            assessment_cols = headers[:]
-            roll_col_idx = None
-            name_col_idx = None
-            meta_indices.clear()
+        # Helper to test if a cell has valid marks
+        def _has_valid_mark_value(val):
+            s = str(val).strip()
+            if not s or s.upper() in ['AB', 'ABS', 'ABSENT', 'NA', 'N/A', '-', '–', '—', 'X', '.']:
+                return False
+            try:
+                float(s)
+                return True
+            except ValueError:
+                return False
+
+        # Filter active assessment columns:
+        # A column MUST NOT be in meta_indices, and MUST have at least one valid student mark scored!
+        active_col_indices = []
+        for i, h in enumerate(headers):
+            if i in meta_indices:
+                continue
+            has_marks = any(_has_valid_mark_value(r[i]) for r in rows if i < len(r))
+            if has_marks:
+                active_col_indices.append(i)
+
+        # Fallback if no column had marks (e.g. testing with blank marks)
+        if not active_col_indices:
+            active_col_indices = [i for i, h in enumerate(headers) if i not in meta_indices and h.strip()]
+
+        assessment_cols = [headers[i] if headers[i].strip() else f"Assessment_{i+1}" for i in active_col_indices]
 
         for r_idx, row in enumerate(rows, start=1):
             if roll_col_idx is not None and roll_col_idx < len(row) and row[roll_col_idx].strip():
@@ -449,9 +478,9 @@ def api_upload_direct():
                 name = f"Student {r_idx}"
 
             marks = {}
-            for i, h in enumerate(headers):
-                if i not in meta_indices:
-                    marks[h] = row[i].strip() if i < len(row) else ""
+            for i in active_col_indices:
+                h_name = headers[i] if headers[i].strip() else f"Assessment_{i+1}"
+                marks[h_name] = row[i].strip() if i < len(row) else ""
             students_list.append({'roll_no': roll, 'name': name, 'marks': marks})
 
     # Build smart default column configurations for each assessment
@@ -473,7 +502,11 @@ def api_upload_direct():
 
         max_observed = max(numeric_marks) if numeric_marks else 0.0
 
-        if 'cce' in col_lower or 'quiz' in col_lower or 'assign' in col_lower:
+        # Check if column name has explicit max marks in parentheses, e.g. "CCE1 (10)" -> 10.0
+        m_max = re.search(r'\(\s*(\d+(?:\.\d+)?)\s*\)', col_name) or re.search(r'out\s*of\s*(\d+(?:\.\d+)?)', col_name, re.I)
+        if m_max:
+            base_max = float(m_max.group(1))
+        elif 'cce' in col_lower or 'quiz' in col_lower or 'assign' in col_lower:
             base_max = 10.0
         elif 'ut' in col_lower or 'unit' in col_lower or 'test' in col_lower:
             base_max = 30.0 if max_observed > 20.0 else 20.0
@@ -949,7 +982,7 @@ def download_learners_pdf():
     pdf_io = create_slow_fast_learners_pdf(report_data, learners_data)
     teacher = state.get('teacher') or {}
     subject_safe = re.sub(r'[^a-zA-Z0-9_-]', '_', teacher.get('subject', 'Course'))
-    filename = f"Slow_and_Fast_Learners_Report_{subject_safe}.pdf"
+    filename = f"Slow_and_Advanced_Learners_Report_{subject_safe}.pdf"
     
     return send_file(
         pdf_io,

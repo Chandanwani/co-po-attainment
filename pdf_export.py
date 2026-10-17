@@ -723,7 +723,7 @@ def create_slow_fast_learners_pdf(report_data: Dict[str, Any], learners_data: Di
     elements.extend(build_institution_header(styles))
 
     # 2. Document Title
-    elements.append(Paragraph("STUDENT CATEGORIZATION REPORT: SLOW & FAST LEARNERS", title_style))
+    elements.append(Paragraph("STUDENT CATEGORIZATION REPORT: SLOW & ADVANCED LEARNERS", title_style))
     elements.append(Spacer(1, 4))
 
     # 3. 2-Line Teacher Info Box
@@ -735,13 +735,13 @@ def create_slow_fast_learners_pdf(report_data: Dict[str, Any], learners_data: Di
     # 4. Identification Thresholds Banner
     target_ass = learners_data.get('target_assessment', 'Overall Evaluation')
     slow_th_pct = learners_data.get('slow_threshold_pct', 50.0)
-    fast_th_pct = learners_data.get('fast_threshold_pct', 70.0)
+    fast_th_pct = learners_data.get('advanced_threshold_pct') or learners_data.get('fast_threshold_pct', 70.0)
     slow_th_m = learners_data.get('slow_threshold_marks')
-    fast_th_m = learners_data.get('fast_threshold_marks')
+    fast_th_m = learners_data.get('advanced_threshold_marks') or learners_data.get('fast_threshold_marks')
     max_m = learners_data.get('target_max_marks', 100.0)
     tot_eval = learners_data.get('total_evaluated', 0)
-    fast_cnt = learners_data.get('fast_count', 0)
-    fast_pct = learners_data.get('fast_pct', 0.0)
+    fast_cnt = learners_data.get('advanced_count') or learners_data.get('fast_count', 0)
+    fast_pct = learners_data.get('advanced_pct') or learners_data.get('fast_pct', 0.0)
     slow_cnt = learners_data.get('slow_count', 0)
     slow_pct = learners_data.get('slow_pct', 0.0)
 
@@ -750,10 +750,10 @@ def create_slow_fast_learners_pdf(report_data: Dict[str, Any], learners_data: Di
 
     criteria_html = (
         f"<b>Categorization Assessment:</b> {target_ass} &nbsp;&nbsp;|&nbsp;&nbsp; "
-        f"<b>Fast Learner Threshold:</b> {fast_crit_str} &nbsp;&nbsp;|&nbsp;&nbsp; "
+        f"<b>Advanced Learner Threshold:</b> {fast_crit_str} &nbsp;&nbsp;|&nbsp;&nbsp; "
         f"<b>Slow Learner Threshold:</b> {slow_crit_str}<br/>"
         f"<b>Total Evaluated:</b> {tot_eval} &nbsp;&nbsp;|&nbsp;&nbsp; "
-        f"<b>Identified Fast Learners:</b> {fast_cnt} &bull; {fast_pct}% &nbsp;&nbsp;|&nbsp;&nbsp; "
+        f"<b>Identified Advanced Learners:</b> {fast_cnt} &bull; {fast_pct}% &nbsp;&nbsp;|&nbsp;&nbsp; "
         f"<b>Identified Slow Learners:</b> {slow_cnt} &bull; {slow_pct}%"
     )
     criteria_table = Table([[Paragraph(criteria_html, normal_cell)]], colWidths=[540])
@@ -768,9 +768,9 @@ def create_slow_fast_learners_pdf(report_data: Dict[str, Any], learners_data: Di
     elements.append(criteria_table)
     elements.append(Spacer(1, 8))
 
-    # 5. Table 1: Fast Learners List
-    fast_learners = learners_data.get('fast_learners', [])
-    elements.append(Paragraph(f"1. Identified Fast Learners (Marks {fast_crit_str}) - Total: {len(fast_learners)} Students", h2_style))
+    # 5. Table 1: Advanced Learners List
+    fast_learners = learners_data.get('advanced_learners') or learners_data.get('fast_learners', [])
+    elements.append(Paragraph(f"1. Identified Advanced Learners (Marks {fast_crit_str}) - Total: {len(fast_learners)} Students", h2_style))
     f_headers = [
         Paragraph("Sr.", header_cell),
         Paragraph("Roll No", header_cell),
@@ -789,7 +789,7 @@ def create_slow_fast_learners_pdf(report_data: Dict[str, Any], learners_data: Di
                 Paragraph(str(fl.get('max_marks', '-')), normal_cell),
             ])
     else:
-        f_rows.append([Paragraph("No students met the Fast Learner criteria.", normal_cell), Paragraph("-", normal_cell), Paragraph("-", normal_cell), Paragraph("-", normal_cell), Paragraph("-", normal_cell)])
+        f_rows.append([Paragraph("No students met the Advanced Learner criteria.", normal_cell), Paragraph("-", normal_cell), Paragraph("-", normal_cell), Paragraph("-", normal_cell), Paragraph("-", normal_cell)])
 
     f_table = Table(f_rows, colWidths=[0.5*inch, 1.3*inch, 3.5*inch, 1.1*inch, 1.1*inch])
     f_table.setStyle(TableStyle([

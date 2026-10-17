@@ -206,6 +206,37 @@ function renderColumnConfigs(configs) {
   });
 }
 
+function applyBatchCCEMaxMarks() {
+  const batchInp = document.getElementById('batchCCEMaxInput');
+  if (!batchInp) return;
+  const val = parseFloat(batchInp.value);
+  if (isNaN(val) || val <= 0) {
+    alert('Please enter a valid positive number for CCE Max Marks.');
+    return;
+  }
+  if (!currentDirectRaw || !currentDirectRaw.column_configs) return;
+  
+  let appliedCount = 0;
+  currentDirectRaw.column_configs.forEach((col, idx) => {
+    if (/cce/i.test(col.name)) {
+      col.max_marks = val;
+      const inp = document.getElementById(`maxMarks_${idx}`);
+      if (inp) {
+        inp.value = val;
+        onMaxMarksChange(idx);
+      }
+      appliedCount++;
+    }
+  });
+
+  if (appliedCount > 0) {
+    showDirectSuccess(`Updated max marks to ${val} for ${appliedCount} CCE column(s).`);
+    setTimeout(() => { hideDirectAlerts(); }, 3000);
+  } else {
+    showDirectWarning('No CCE column found in current assessment columns.');
+  }
+}
+
 let maxMarksTimer = null;
 function onMaxMarksChange(idx) {
   hideDirectError();
@@ -598,9 +629,10 @@ function populateLearnerTargets(summaries) {
   if (!sel) return;
   currentAssessmentSummaries = summaries || [];
   const currVal = sel.value;
-  sel.innerHTML = '<option value="overall" data-max="100">Overall Marks (Aggregate)</option>';
+  sel.innerHTML = '<option value="overall" data-max="100">Overall Aggregate Marks</option>';
   if (summaries && summaries.length > 0) {
     summaries.forEach(a => {
+      // Only include actual given assessment columns
       const opt = document.createElement('option');
       opt.value = a.name;
       opt.setAttribute('data-max', a.max_marks || 100);
@@ -614,20 +646,37 @@ function populateLearnerTargets(summaries) {
   updateLearnerMaxLabels();
 }
 
-function updateLearnerMaxLabels() {
+function setLearnerMode(mode) {
   const sel = document.getElementById('learnerTargetSelect');
   if (!sel) return;
+  if (mode === 'overall') {
+    sel.value = 'overall';
+  } else if (mode === 'individual') {
+    if (sel.value === 'overall' && sel.options.length > 1) {
+      sel.selectedIndex = 1;
+    }
+  }
+  onLearnerTargetChange();
+}
+
+function updateLearnerMaxLabels() {
+  const sel = document.getElementById('learnerTargetSelect');
+  if (!sel) return 100;
   const selOpt = sel.options[sel.selectedIndex];
   let maxMarks = 100;
-  if (selOpt) {
+  if (sel.value === 'overall') {
+    if (currentComputedDirect && currentComputedDirect.students && currentComputedDirect.students.length > 0) {
+      const totMax = parseFloat(currentComputedDirect.students[0].total_max);
+      if (!isNaN(totMax) && totMax > 0) maxMarks = totMax;
+    } else if (currentAssessmentSummaries && currentAssessmentSummaries.length > 0) {
+      const sumMax = currentAssessmentSummaries.reduce((acc, a) => acc + (parseFloat(a.max_marks) || 0), 0);
+      if (sumMax > 0) maxMarks = sumMax;
+    }
+  } else if (selOpt) {
     const dMax = parseFloat(selOpt.getAttribute('data-max'));
     if (!isNaN(dMax) && dMax > 0) {
       maxMarks = dMax;
     }
-  }
-  if (sel.value === 'overall' && currentComputedDirect && currentComputedDirect.students && currentComputedDirect.students.length > 0) {
-    const totMax = parseFloat(currentComputedDirect.students[0].total_max);
-    if (!isNaN(totMax) && totMax > 0) maxMarks = totMax;
   }
   const maxLabel = `/ ${maxMarks}`;
   if (document.getElementById('lblSlowMax')) document.getElementById('lblSlowMax').textContent = maxLabel;
@@ -637,12 +686,12 @@ function updateLearnerMaxLabels() {
 
 function onLearnerTargetChange() {
   const maxMarks = updateLearnerMaxLabels();
-  // Suggest defaults: slow = 40% of max, fast = 70% of max
+  // Suggest defaults: slow = 40% of max, advanced = 70% of max
   const slowInp = document.getElementById('slowThresholdInput');
   const fastInp = document.getElementById('fastThresholdInput');
   if (slowInp && fastInp) {
-    slowInp.value = Math.round(maxMarks * 0.4);
-    fastInp.value = Math.round(maxMarks * 0.7);
+    slowInp.value = Math.round(maxMarks * 0.4 * 10) / 10;
+    fastInp.value = Math.round(maxMarks * 0.7 * 10) / 10;
   }
   updateLearnersCategorization();
 }
@@ -685,20 +734,25 @@ async function updateLearnersCategorization(overrideDirect) {
 }
 
 function renderLearnersTables(data) {
+  const advCount = data.advanced_count !== undefined ? data.advanced_count : data.fast_count;
+  const advPct = data.advanced_pct !== undefined ? data.advanced_pct : data.fast_pct;
+  const advLearners = data.advanced_learners || data.fast_learners || [];
+  const advThresh = data.advanced_threshold_marks !== undefined ? data.advanced_threshold_marks : data.fast_threshold_marks;
+
   // Update counts
   if (document.getElementById('slowLearnerCount')) document.getElementById('slowLearnerCount').textContent = data.slow_count;
   if (document.getElementById('slowLearnerPct')) document.getElementById('slowLearnerPct').textContent = `${data.slow_pct}% of cohort`;
   if (document.getElementById('badgeSlowTotal')) document.getElementById('badgeSlowTotal').textContent = `${data.slow_count} Students`;
 
-  if (document.getElementById('fastLearnerCount')) document.getElementById('fastLearnerCount').textContent = data.fast_count;
-  if (document.getElementById('fastLearnerPct')) document.getElementById('fastLearnerPct').textContent = `${data.fast_pct}% of cohort`;
-  if (document.getElementById('badgeFastTotal')) document.getElementById('badgeFastTotal').textContent = `${data.fast_count} Students`;
+  if (document.getElementById('fastLearnerCount')) document.getElementById('fastLearnerCount').textContent = advCount;
+  if (document.getElementById('fastLearnerPct')) document.getElementById('fastLearnerPct').textContent = `${advPct}% of cohort`;
+  if (document.getElementById('badgeFastTotal')) document.getElementById('badgeFastTotal').textContent = `${advCount} Students`;
 
   if (data.slow_threshold_marks !== undefined && document.getElementById('lblSlowThresh')) {
     document.getElementById('lblSlowThresh').textContent = data.slow_threshold_marks;
   }
-  if (data.fast_threshold_marks !== undefined && document.getElementById('lblFastThresh')) {
-    document.getElementById('lblFastThresh').textContent = data.fast_threshold_marks;
+  if (advThresh !== undefined && document.getElementById('lblFastThresh')) {
+    document.getElementById('lblFastThresh').textContent = advThresh;
   }
 
   // Render Slow Learners Table (Roll No, Name, Marks Obtained, Out Of)
@@ -721,14 +775,14 @@ function renderLearnersTables(data) {
     }
   }
 
-  // Render Fast Learners Table (Roll No, Name, Marks Obtained, Out Of)
+  // Render Advanced Learners Table (Roll No, Name, Marks Obtained, Out Of)
   const fastTbody = document.getElementById('fastLearnersTable') ? document.getElementById('fastLearnersTable').querySelector('tbody') : null;
   if (fastTbody) {
     fastTbody.innerHTML = '';
-    if (!data.fast_learners || data.fast_learners.length === 0) {
-      fastTbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted" style="padding: 16px;">No fast learners identified under this criteria.</td></tr>';
+    if (!advLearners || advLearners.length === 0) {
+      fastTbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted" style="padding: 16px;">No advanced learners identified under this criteria.</td></tr>';
     } else {
-      data.fast_learners.forEach(s => {
+      advLearners.forEach(s => {
         const tr = document.createElement('tr');
         tr.innerHTML = `
           <td class="bold" style="color: #166534;">${s.roll_no}</td>
