@@ -496,5 +496,5 @@ function proceedPdfDownload() {
     }
   }
   closePdfModal();
-  window.location.href = `/download/pdf-report?charts=${charts}`;
+  downloadFileWithState(`/download/pdf-report?charts=${charts}`, 'Comprehensive_CO_PO_Report.pdf');
 }

@@ -17,7 +17,7 @@
       </div>
       <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
         <a href="{{ url_for('page2_assessment') }}" class="btn btn-outline btn-sm" style="white-space: nowrap;">&larr; Back to Assessment Data</a>
-        <a href="{{ url_for('download_copo_pdf') }}" id="btnCOPOPdfTop" class="btn btn-outline btn-sm" style="display: none; white-space: nowrap; color: #dc2626; border-color: #fca5a5;">📄 Download CO-PO PDF</a>
+        <a href="{{ url_for('download_copo_pdf') }}" id="btnCOPOPdfTop" class="btn btn-outline btn-sm" style="display: none; white-space: nowrap; color: #dc2626; border-color: #fca5a5;" onclick="event.preventDefault(); downloadFileWithState('{{ url_for('download_copo_pdf') }}', 'CO_PO_Attainment_Report.pdf')">📄 Download CO-PO PDF</a>
         <a href="{{ url_for('page4_report') }}" id="btnGoToStep4" class="btn btn-primary btn-sm" style="display: none; white-space: nowrap;">Go to Final Report &rarr;</a>
       </div>
     </div>
@@ -98,10 +98,10 @@
           </p>
         </div>
         <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
-          <a href="{{ url_for('download_copo_pdf') }}" class="btn btn-sm" style="background: #dc2626; border-color: #dc2626; color: #fff; font-weight: 600;">
+          <a href="{{ url_for('download_copo_pdf') }}" class="btn btn-sm" style="background: #dc2626; border-color: #dc2626; color: #fff; font-weight: 600;" onclick="event.preventDefault(); downloadFileWithState('{{ url_for('download_copo_pdf') }}', 'CO_PO_Attainment_Report.pdf')">
             📄 Download CO-PO PDF
           </a>
-          <a href="{{ url_for('download_copo_report') }}" class="btn btn-outline btn-sm">
+          <a href="{{ url_for('download_copo_report') }}" class="btn btn-outline btn-sm" onclick="event.preventDefault(); downloadFileWithState('{{ url_for('download_copo_report') }}', 'CO_PO_Attainment.xlsx')">
             &darr; CO-PO Excel (.xlsx)
           </a>
           <span class="badge" id="overallPOBadge" style="font-size: 14px; padding: 6px 12px; background: #dcfce7; color: #166534; border-color: #86efac;">

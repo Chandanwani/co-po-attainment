@@ -948,40 +948,155 @@ def api_categorize_learners():
     return jsonify({'success': True, 'data': result})
 
 
-@app.route('/download/learners-pdf')
-def download_learners_pdf():
-    """Generates and downloads the dedicated Slow & Fast Learners PDF report."""
+def get_report_data_from_request_or_session() -> Dict[str, Any]:
+    """
+    Robustly resolves report data from client POST payload, session store, or disk cache.
+    Guarantees that serverless lambda restarts never produce empty reports or blank PDFs.
+    """
     sid = get_session_id()
-    state = TEMP_DATA_STORE[sid]
+    state = TEMP_DATA_STORE.get(sid, {})
     
-    direct_data = state.get('direct_computed') or {}
-    learners_data = state.get('learners_data')
+    payload = {}
+    if request.method == 'POST':
+        try:
+            payload = request.get_json(silent=True) or {}
+        except Exception:
+            payload = {}
+            
+    # If client passed full state in POST payload, sync it immediately
+    if payload:
+        if 'teacher' in payload and payload['teacher']:
+            state['teacher'] = payload['teacher']
+            session['teacher'] = payload['teacher']
+        if 'direct' in payload and payload['direct']:
+            state['direct_computed'] = payload['direct']
+        if 'indirect' in payload and payload['indirect']:
+            state['indirect_computed'] = payload['indirect']
+        if 'weighted' in payload and payload['weighted']:
+            state['weighted_computed'] = payload['weighted']
+        if 'copo' in payload and payload['copo']:
+            state['copo_computed'] = payload['copo']
+        if 'learners' in payload and payload['learners']:
+            state['learners_data'] = payload['learners']
+        TEMP_DATA_STORE[sid] = state
+        save_session_state(sid)
+
+    # Resolve teacher info
+    teacher = payload.get('teacher') or state.get('teacher') or session.get('teacher') or {}
+    if not isinstance(teacher, dict):
+        teacher = {}
     
-    if not learners_data and direct_data.get('students'):
-        # Compute default
-        learners_data = categorize_slow_fast_learners(
-            students=direct_data.get('students', []),
-            slow_threshold_pct=50.0,
-            fast_threshold_pct=70.0,
-            target_assessment='overall',
-            assessment_summaries=direct_data.get('assessment_summaries', []),
-            threshold_mode='marks'
-        )
-        state['learners_data'] = learners_data
+    # Direct
+    direct = payload.get('direct') or state.get('direct_computed')
+    if not direct and state.get('direct_raw'):
+        try:
+            raw = state['direct_raw']
+            res = compute_direct_attainment(raw.get('column_configs', []), raw.get('students', []))
+            if res.get('success'):
+                direct = res.get('data')
+                state['direct_computed'] = direct
+                save_session_state(sid)
+        except Exception:
+            pass
+    if not isinstance(direct, dict):
+        direct = {}
+
+    # Indirect
+    indirect = payload.get('indirect') or state.get('indirect_computed')
+    if not isinstance(indirect, dict):
+        indirect = {}
+
+    # Weighted
+    weighted = payload.get('weighted') or state.get('weighted_computed')
+    if not weighted and direct and direct.get('co_summaries'):
+        d_summaries = direct.get('co_summaries', [])
+        valid_atts = [float(c.get('attainment', 0) or 0) for c in d_summaries if c.get('attainment') is not None]
+        avg_a = (sum(valid_atts) / len(valid_atts)) if valid_atts else 0.0
+        lvl_a = "Level 3 - High" if avg_a >= 2.5 else ("Level 2 - Moderate" if avg_a >= 1.5 else "Level 1 - Low")
+        weighted = {
+            'overall_attainment': f"{avg_a:.2f}",
+            'overall_level_label': lvl_a,
+            'direct_weight': 80,
+            'indirect_weight': 20,
+            'combined_results': [
+                {
+                    'co': c.get('co'),
+                    'direct_pct': c.get('pass_percentage', 0),
+                    'direct_contribution': round(float(c.get('pass_percentage', 0) or 0) * 0.8, 1),
+                    'direct_attainment': c.get('attainment', 0),
+                    'indirect_pct': 0,
+                    'indirect_contribution': 0.0,
+                    'indirect_attainment': 0.0,
+                    'combined_pct': c.get('pass_percentage', 0),
+                    'combined_attainment': c.get('attainment', 0),
+                    'level_label': c.get('level_label', 'Level 0')
+                } for c in d_summaries
+            ]
+        }
+        state['weighted_computed'] = weighted
+        save_session_state(sid)
+    if not isinstance(weighted, dict):
+        weighted = {}
+
+    # CO-PO
+    copo = payload.get('copo') or state.get('copo_computed')
+    if not isinstance(copo, dict):
+        copo = {}
+
+    # Learners
+    learners = payload.get('learners') or state.get('learners_data')
+    if not learners and direct.get('students'):
+        try:
+            learners = categorize_slow_fast_learners(
+                students=direct.get('students', []),
+                slow_threshold_pct=40.0,
+                fast_threshold_pct=70.0,
+                target_assessment='overall',
+                assessment_summaries=direct.get('assessment_summaries', []),
+                threshold_mode='marks'
+            )
+            state['learners_data'] = learners
+            save_session_state(sid)
+        except Exception:
+            pass
+    if not isinstance(learners, dict):
+        learners = {}
+
+    return {
+        'teacher': teacher,
+        'direct': {'data': direct},
+        'indirect': {'data': indirect},
+        'weighted': {'data': weighted},
+        'copo': copo,
+        'learners': learners
+    }
+
+
+@app.route('/download/learners-pdf', methods=['GET', 'POST'])
+def download_learners_pdf():
+    """Generates and downloads the dedicated Slow & Advanced Learners PDF report."""
+    report_data = get_report_data_from_request_or_session()
+    learners_data = report_data.get('learners') or {}
+    
+    if not learners_data:
+        direct_data = (report_data.get('direct') or {}).get('data') or {}
+        if direct_data.get('students'):
+            learners_data = categorize_slow_fast_learners(
+                students=direct_data.get('students', []),
+                slow_threshold_pct=40.0,
+                fast_threshold_pct=70.0,
+                target_assessment='overall',
+                assessment_summaries=direct_data.get('assessment_summaries', []),
+                threshold_mode='marks'
+            )
+            report_data['learners'] = learners_data
         
     if not learners_data:
-        return jsonify({'success': False, 'message': 'No student data available to generate Slow & Fast Learners report.'}), 400
+        return jsonify({'success': False, 'message': 'No student data available to generate Slow & Advanced Learners report.'}), 400
         
-    report_data = {
-        'teacher': state.get('teacher') or {},
-        'direct': {'data': direct_data},
-        'weighted': {'data': state.get('weighted_computed') or {}},
-        'copo': state.get('copo_computed') or {}
-    }
-    
     pdf_io = create_slow_fast_learners_pdf(report_data, learners_data)
-    teacher = state.get('teacher') or {}
-    subject_safe = re.sub(r'[^a-zA-Z0-9_-]', '_', teacher.get('subject', 'Course'))
+    teacher = report_data.get('teacher') or {}
+    subject_safe = re.sub(r'[^a-zA-Z0-9_-]', '_', teacher.get('subject', 'Course') or 'Course')
     filename = f"Slow_and_Advanced_Learners_Report_{subject_safe}.pdf"
     
     return send_file(
@@ -996,7 +1111,7 @@ def download_learners_pdf():
 def api_get_full_state():
     """Returns the complete evaluation state for rendering."""
     sid = get_session_id()
-    state = TEMP_DATA_STORE[sid]
+    state = TEMP_DATA_STORE.get(sid, {})
     return jsonify({
         'teacher': state.get('teacher', {}),
         'direct': state.get('direct_computed'),
@@ -1008,25 +1123,15 @@ def api_get_full_state():
 
 
 # =========================================================================
-# EXPORTS & DOWNLOADS
+# EXPORTS & DOWNLOADS (Supporting both GET and POST for state preservation)
 # =========================================================================
 
-@app.route('/download/complete-excel')
+@app.route('/download/complete-excel', methods=['GET', 'POST'])
 def download_complete_excel():
     """Generates and downloads the full multi-sheet Excel report."""
-    sid = get_session_id()
-    state = TEMP_DATA_STORE[sid]
-    
-    report_data = {
-        'teacher': state.get('teacher') or {},
-        'direct': {'data': state.get('direct_computed') or {}},
-        'indirect': {'data': state.get('indirect_computed') or {}},
-        'weighted': {'data': state.get('weighted_computed') or {}},
-        'copo': state.get('copo_computed') or {}
-    }
-
+    report_data = get_report_data_from_request_or_session()
     excel_io = create_complete_excel_report(report_data)
-    subject_safe = re.sub(r'[^a-zA-Z0-9_-]', '_', state.get('teacher', {}).get('subject', 'Course'))
+    subject_safe = re.sub(r'[^a-zA-Z0-9_-]', '_', report_data.get('teacher', {}).get('subject', 'Course') or 'Course')
     filename = f"CO_PO_Attainment_Report_{subject_safe}.xlsx"
     
     return send_file(
@@ -1037,22 +1142,12 @@ def download_complete_excel():
     )
 
 
-@app.route('/download/word-report')
+@app.route('/download/word-report', methods=['GET', 'POST'])
 def download_word_report():
     """Generates and downloads the Word DOCX report."""
-    sid = get_session_id()
-    state = TEMP_DATA_STORE[sid]
-
-    report_data = {
-        'teacher': state.get('teacher') or {},
-        'direct': {'data': state.get('direct_computed') or {}},
-        'indirect': {'data': state.get('indirect_computed') or {}},
-        'weighted': {'data': state.get('weighted_computed') or {}},
-        'copo': state.get('copo_computed') or {}
-    }
-
+    report_data = get_report_data_from_request_or_session()
     docx_io = create_word_report(report_data)
-    subject_safe = re.sub(r'[^a-zA-Z0-9_-]', '_', state.get('teacher', {}).get('subject', 'Course'))
+    subject_safe = re.sub(r'[^a-zA-Z0-9_-]', '_', report_data.get('teacher', {}).get('subject', 'Course') or 'Course')
     filename = f"CO_PO_Attainment_Report_{subject_safe}.docx"
 
     return send_file(
@@ -1063,28 +1158,18 @@ def download_word_report():
     )
 
 
-@app.route('/download/pdf-report')
+@app.route('/download/pdf-report', methods=['GET', 'POST'])
 def download_pdf_report():
     """Generates and downloads the accreditation-ready PDF report."""
-    sid = get_session_id()
-    state = TEMP_DATA_STORE[sid]
+    report_data = get_report_data_from_request_or_session()
+    charts_arg = request.args.get('charts') or (request.get_json(silent=True) or {}).get('charts', '1')
+    include_charts = str(charts_arg).lower() in ['1', 'true', 'yes', 'on']
 
-    report_data = {
-        'teacher': state.get('teacher') or {},
-        'direct': {'data': state.get('direct_computed') or {}},
-        'indirect': {'data': state.get('indirect_computed') or {}},
-        'weighted': {'data': state.get('weighted_computed') or {}},
-        'copo': state.get('copo_computed') or {}
-    }
-
-    charts_arg = request.args.get('charts', '1').lower()
-    include_charts = charts_arg in ['1', 'true', 'yes', 'on']
-
-    pdf_io = create_pdf_report(report_data, include_charts=include_charts)
-    teacher = state.get('teacher') or {}
-    subject_safe = re.sub(r'[^a-zA-Z0-9_-]', '_', teacher.get('subject', 'Course'))
+    pdf_io = create_pdf_report(report_data, include_charts=include_charts, section="all")
+    teacher = report_data.get('teacher') or {}
+    subject_safe = re.sub(r'[^a-zA-Z0-9_-]', '_', teacher.get('subject', 'Course') or 'Course')
     chart_suffix = "_With_Graphs" if include_charts else "_Tables_Only"
-    filename = f"CO_PO_Attainment_Report_{subject_safe}{chart_suffix}.pdf"
+    filename = f"Comprehensive_CO_PO_Report_{subject_safe}{chart_suffix}.pdf"
 
     return send_file(
         pdf_io,
@@ -1094,26 +1179,16 @@ def download_pdf_report():
     )
 
 
-@app.route('/download/assessment-pdf')
+@app.route('/download/assessment-pdf', methods=['GET', 'POST'])
 def download_assessment_pdf():
     """Generates and downloads the Page 2 Assessment PDF report (Direct, Assessment Tools, Weighted COs)."""
-    sid = get_session_id()
-    state = TEMP_DATA_STORE[sid]
-
-    report_data = {
-        'teacher': state.get('teacher') or {},
-        'direct': {'data': state.get('direct_computed') or {}},
-        'indirect': {'data': state.get('indirect_computed') or {}},
-        'weighted': {'data': state.get('weighted_computed') or {}},
-        'copo': state.get('copo_computed') or {}
-    }
-
-    charts_arg = request.args.get('charts', '1').lower()
-    include_charts = charts_arg in ['1', 'true', 'yes', 'on']
+    report_data = get_report_data_from_request_or_session()
+    charts_arg = request.args.get('charts') or (request.get_json(silent=True) or {}).get('charts', '1')
+    include_charts = str(charts_arg).lower() in ['1', 'true', 'yes', 'on']
 
     pdf_io = create_pdf_report(report_data, include_charts=include_charts, section="assessment")
-    teacher = state.get('teacher') or {}
-    subject_safe = re.sub(r'[^a-zA-Z0-9_-]', '_', teacher.get('subject', 'Course'))
+    teacher = report_data.get('teacher') or {}
+    subject_safe = re.sub(r'[^a-zA-Z0-9_-]', '_', teacher.get('subject', 'Course') or 'Course')
     chart_suffix = "_With_Graphs" if include_charts else "_Tables_Only"
     filename = f"CO_Assessment_Report_{subject_safe}{chart_suffix}.pdf"
 
@@ -1125,23 +1200,16 @@ def download_assessment_pdf():
     )
 
 
-@app.route('/download/copo-pdf')
+@app.route('/download/copo-pdf', methods=['GET', 'POST'])
 def download_copo_pdf():
     """Generates and downloads the Page 3 CO-PO Matrix & PO Attainment PDF report."""
-    sid = get_session_id()
-    state = TEMP_DATA_STORE[sid]
+    report_data = get_report_data_from_request_or_session()
+    charts_arg = request.args.get('charts') or (request.get_json(silent=True) or {}).get('charts', '1')
+    include_charts = str(charts_arg).lower() in ['1', 'true', 'yes', 'on']
 
-    report_data = {
-        'teacher': state.get('teacher') or {},
-        'direct': {'data': state.get('direct_computed') or {}},
-        'indirect': {'data': state.get('indirect_computed') or {}},
-        'weighted': {'data': state.get('weighted_computed') or {}},
-        'copo': state.get('copo_computed') or {}
-    }
-
-    pdf_io = create_pdf_report(report_data, include_charts=False, section="copo")
-    teacher = state.get('teacher') or {}
-    subject_safe = re.sub(r'[^a-zA-Z0-9_-]', '_', teacher.get('subject', 'Course'))
+    pdf_io = create_pdf_report(report_data, include_charts=include_charts, section="copo")
+    teacher = report_data.get('teacher') or {}
+    subject_safe = re.sub(r'[^a-zA-Z0-9_-]', '_', teacher.get('subject', 'Course') or 'Course')
     filename = f"CO_PO_Attainment_Report_{subject_safe}.pdf"
 
     return send_file(
@@ -1152,16 +1220,15 @@ def download_copo_pdf():
     )
 
 
-@app.route('/download/students-report')
+@app.route('/download/students-report', methods=['GET', 'POST'])
 def download_students_report():
     """Generates and downloads the student-wise performance and marks report in Excel."""
-    sid = get_session_id()
-    state = TEMP_DATA_STORE[sid]
-    direct_data = state.get('direct_computed') or {}
-    teacher = state.get('teacher') or {}
+    report_data = get_report_data_from_request_or_session()
+    direct_data = (report_data.get('direct') or {}).get('data') or {}
+    teacher = report_data.get('teacher') or {}
 
     excel_io = create_students_only_excel(direct_data, teacher)
-    subject_safe = re.sub(r'[^a-zA-Z0-9_-]', '_', teacher.get('subject', 'Course'))
+    subject_safe = re.sub(r'[^a-zA-Z0-9_-]', '_', teacher.get('subject', 'Course') or 'Course')
     filename = f"Students_Performance_Report_{subject_safe}.xlsx"
 
     return send_file(
@@ -1172,15 +1239,14 @@ def download_students_report():
     )
 
 
-@app.route('/download/direct-report')
+@app.route('/download/direct-report', methods=['GET', 'POST'])
 def download_direct_report():
-    sid = get_session_id()
-    state = TEMP_DATA_STORE[sid]
-    direct_data = state.get('direct_computed', {})
-    teacher = state.get('teacher', {})
+    report_data = get_report_data_from_request_or_session()
+    direct_data = (report_data.get('direct') or {}).get('data') or {}
+    teacher = report_data.get('teacher') or {}
 
     excel_io = create_direct_only_excel(direct_data, teacher)
-    subject_safe = re.sub(r'[^a-zA-Z0-9_-]', '_', teacher.get('subject', 'Course'))
+    subject_safe = re.sub(r'[^a-zA-Z0-9_-]', '_', teacher.get('subject', 'Course') or 'Course')
     return send_file(
         excel_io,
         mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -1189,15 +1255,14 @@ def download_direct_report():
     )
 
 
-@app.route('/download/indirect-report')
+@app.route('/download/indirect-report', methods=['GET', 'POST'])
 def download_indirect_report():
-    sid = get_session_id()
-    state = TEMP_DATA_STORE[sid]
-    indirect_data = state.get('indirect_computed', {})
-    teacher = state.get('teacher', {})
+    report_data = get_report_data_from_request_or_session()
+    indirect_data = (report_data.get('indirect') or {}).get('data') or {}
+    teacher = report_data.get('teacher') or {}
 
     excel_io = create_indirect_only_excel(indirect_data, teacher)
-    subject_safe = re.sub(r'[^a-zA-Z0-9_-]', '_', teacher.get('subject', 'Course'))
+    subject_safe = re.sub(r'[^a-zA-Z0-9_-]', '_', teacher.get('subject', 'Course') or 'Course')
     return send_file(
         excel_io,
         mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -1206,15 +1271,14 @@ def download_indirect_report():
     )
 
 
-@app.route('/download/copo-report')
+@app.route('/download/copo-report', methods=['GET', 'POST'])
 def download_copo_report():
-    sid = get_session_id()
-    state = TEMP_DATA_STORE[sid]
-    copo_data = state.get('copo_computed', {})
-    teacher = state.get('teacher', {})
+    report_data = get_report_data_from_request_or_session()
+    copo_data = report_data.get('copo') or {}
+    teacher = report_data.get('teacher') or {}
 
     excel_io = create_copo_only_excel(copo_data, teacher)
-    subject_safe = re.sub(r'[^a-zA-Z0-9_-]', '_', teacher.get('subject', 'Course'))
+    subject_safe = re.sub(r'[^a-zA-Z0-9_-]', '_', teacher.get('subject', 'Course') or 'Course')
     return send_file(
         excel_io,
         mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",

@@ -20,19 +20,19 @@
           📄 Final PDF Report (.pdf)
         </button>
         <!-- Student Performance Excel Report -->
-        <a href="{{ url_for('download_students_report') }}" class="btn btn-outline btn-sm" style="color: #0369a1; border-color: #7dd3fc; font-weight: 600;">
+        <a href="{{ url_for('download_students_report') }}" class="btn btn-outline btn-sm" style="color: #0369a1; border-color: #7dd3fc; font-weight: 600;" onclick="event.preventDefault(); downloadFileWithState('{{ url_for('download_students_report') }}', 'Students_Performance_Report.xlsx')">
           📊 Students Performance Excel (.xlsx)
         </a>
         <!-- Word Compatible Report Download -->
-        <a href="{{ url_for('download_word_report') }}" class="btn btn-outline btn-sm" style="font-weight: 600;">
+        <a href="{{ url_for('download_word_report') }}" class="btn btn-outline btn-sm" style="font-weight: 600;" onclick="event.preventDefault(); downloadFileWithState('{{ url_for('download_word_report') }}', 'CO_PO_Attainment_Report.docx')">
           📝 Word Report (.docx)
         </a>
         <!-- Slow and Advanced Learners PDF -->
-        <a href="{{ url_for('download_learners_pdf') }}" class="btn btn-outline btn-sm" style="color: #059669; border-color: #a7f3d0; font-weight: 600;">
+        <a href="{{ url_for('download_learners_pdf') }}" class="btn btn-outline btn-sm" style="color: #059669; border-color: #a7f3d0; font-weight: 600;" onclick="event.preventDefault(); downloadFileWithState('{{ url_for('download_learners_pdf') }}', 'Slow_and_Advanced_Learners_Report.pdf')">
           🎯 Slow &amp; Advanced Learners PDF
         </a>
         <!-- Assessment PDF -->
-        <a href="{{ url_for('download_assessment_pdf') }}" class="btn btn-outline btn-sm" style="font-weight: 600;">
+        <a href="{{ url_for('download_assessment_pdf') }}" class="btn btn-outline btn-sm" style="font-weight: 600;" onclick="event.preventDefault(); downloadFileWithState('{{ url_for('download_assessment_pdf') }}', 'CO_Assessment_Report.pdf')">
           📋 Assessment PDF
         </a>
         <!-- Reset / Start New Session Button -->

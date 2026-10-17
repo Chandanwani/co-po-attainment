@@ -327,10 +327,25 @@ def create_pdf_report(report_data: Dict[str, Any], include_charts: bool = True, 
     elements = []
 
     teacher = report_data.get('teacher') or {}
-    direct = (report_data.get('direct') or {}).get('data') or {}
-    indirect = (report_data.get('indirect') or {}).get('data') or {}
-    weighted = (report_data.get('weighted') or {}).get('data') or {}
-    copo = report_data.get('copo') or {}
+    direct_raw = report_data.get('direct') or {}
+    direct = direct_raw.get('data') if isinstance(direct_raw, dict) and 'data' in direct_raw else direct_raw
+    if not isinstance(direct, dict):
+        direct = {}
+
+    indirect_raw = report_data.get('indirect') or {}
+    indirect = indirect_raw.get('data') if isinstance(indirect_raw, dict) and 'data' in indirect_raw else indirect_raw
+    if not isinstance(indirect, dict):
+        indirect = {}
+
+    weighted_raw = report_data.get('weighted') or {}
+    weighted = weighted_raw.get('data') if isinstance(weighted_raw, dict) and 'data' in weighted_raw else weighted_raw
+    if not isinstance(weighted, dict):
+        weighted = {}
+
+    copo_raw = report_data.get('copo') or {}
+    copo = copo_raw.get('data') if isinstance(copo_raw, dict) and 'data' in copo_raw else copo_raw
+    if not isinstance(copo, dict):
+        copo = {}
 
     # Check if any ESE (End Semester Exam) actually exists in assessments
     has_any_ese = any(
@@ -368,8 +383,15 @@ def create_pdf_report(report_data: Dict[str, Any], include_charts: bool = True, 
     # 1. Institution Header (Top of Page 1)
     elements.extend(build_institution_header(styles))
 
-    # 2. Document Title
-    elements.append(Paragraph("COURSE OUTCOME &amp; PROGRAM OUTCOME ATTAINMENT EVALUATION REPORT", title_style))
+    # 2. Document Title (Context-sensitive)
+    if section == "assessment":
+        doc_title = "DIRECT ASSESSMENT &amp; COURSE OUTCOME (CO) ATTAINMENT REPORT"
+    elif section == "copo":
+        doc_title = "CO-PO MAPPING &amp; PROGRAM OUTCOME (PO) ATTAINMENT REPORT"
+    else:
+        doc_title = "COURSE OUTCOME &amp; PROGRAM OUTCOME ATTAINMENT EVALUATION REPORT"
+
+    elements.append(Paragraph(doc_title, title_style))
     elements.append(Spacer(1, 4))
 
     # 3. Simple 2-Line Teacher Info Box
@@ -378,8 +400,13 @@ def create_pdf_report(report_data: Dict[str, Any], include_charts: bool = True, 
     elements.append(build_two_line_teacher_box(teacher, overall_att, overall_lvl, normal_cell))
     elements.append(Spacer(1, 8))
 
-    # Section 1: Direct CO Attainment Summary
-    if direct.get("co_summaries"):
+    # Empty State Notice if no data exists for requested section
+    if section == "assessment" and not direct.get("co_summaries"):
+        elements.append(Paragraph("<b>Note:</b> No direct assessment marks evaluated yet. Please ensure student marks are uploaded and calculated.", bold_cell))
+        elements.append(Spacer(1, 14))
+
+    # Section 1: Direct CO Attainment Summary (Include for "all" or "assessment")
+    if section in ["all", "assessment"] and direct.get("co_summaries"):
         elements.append(Paragraph("1. Direct Course Outcome (CO) Attainment Summary", h2_style))
         if has_any_ese:
             co_headers = [
@@ -393,7 +420,7 @@ def create_pdf_report(report_data: Dict[str, Any], include_charts: bool = True, 
                 Paragraph("Direct Attainment", header_cell),
                 Paragraph("Attainment Level", header_cell),
             ]
-            co_col_widths = [0.55*inch, 1.4*inch, 0.65*inch, 1.0*inch, 0.65*inch, 1.05*inch, 1.05*inch, 0.95*inch, 1.15*inch]
+            co_col_widths = [30, 95, 45, 65, 45, 65, 65, 60, 70]
         else:
             # When NO ESE marks exist, remove ESE column completely!
             co_headers = [
@@ -405,7 +432,7 @@ def create_pdf_report(report_data: Dict[str, Any], include_charts: bool = True, 
                 Paragraph("Direct Attainment", header_cell),
                 Paragraph("Attainment Level", header_cell),
             ]
-            co_col_widths = [0.65*inch, 2.3*inch, 0.85*inch, 1.25*inch, 0.85*inch, 1.15*inch, 1.4*inch]
+            co_col_widths = [40, 150, 60, 80, 60, 75, 75]
 
         co_rows = [co_headers]
         for c in direct.get("co_summaries", []):
@@ -447,8 +474,8 @@ def create_pdf_report(report_data: Dict[str, Any], include_charts: bool = True, 
         elements.append(co_table)
         elements.append(Spacer(1, 8))
 
-    # Section 2: Assessment Tools Summary
-    if direct.get("assessment_summaries"):
+    # Section 2: Assessment Tools Summary (Include for "all" or "assessment")
+    if section in ["all", "assessment"] and direct.get("assessment_summaries"):
         elements.append(Paragraph("2. Assessment Tools Breakdown", h2_style))
         ass_headers = [
             Paragraph("Tool Name", header_cell),
@@ -475,7 +502,7 @@ def create_pdf_report(report_data: Dict[str, Any], include_charts: bool = True, 
                 Paragraph(str(a.get('avg_marks')), normal_cell),
             ])
 
-        ass_table = Table(ass_rows, colWidths=[1.1*inch, 1.0*inch, 0.75*inch, 0.8*inch, 0.65*inch, 0.65*inch, 0.65*inch, 0.75*inch, 1.05*inch])
+        ass_table = Table(ass_rows, colWidths=[80, 70, 50, 55, 45, 45, 45, 55, 95])
         ass_table.setStyle(TableStyle([
             ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#0F766E')),
             ('GRID', (0, 0), (-1, -1), 0.3, colors.HexColor('#CBD5E1')),
@@ -488,19 +515,19 @@ def create_pdf_report(report_data: Dict[str, Any], include_charts: bool = True, 
         elements.append(ass_table)
         elements.append(Spacer(1, 8))
 
-    # Section 3: Weighted Combined CO Attainment
-    if weighted.get("combined_results"):
+    # Section 3: Weighted Combined CO Attainment (Include for "all" or "assessment")
+    if section in ["all", "assessment"] and weighted.get("combined_results"):
         elements.append(Paragraph("3. Combined Weighted Course Outcome Attainment", h2_style))
         w_headers = [
             Paragraph("CO", header_cell),
             Paragraph("Direct %", header_cell),
-            Paragraph(f"Direct Contrib ({weighted.get('direct_weight', 80)}%)", header_cell),
-            Paragraph("Direct Attain", header_cell),
+            Paragraph(f"Direct ({weighted.get('direct_weight', 80)}%)", header_cell),
+            Paragraph("Direct Att.", header_cell),
             Paragraph("Indirect %", header_cell),
-            Paragraph(f"Indirect Contrib ({weighted.get('indirect_weight', 20)}%)", header_cell),
-            Paragraph("Indirect Attain", header_cell),
+            Paragraph(f"Indirect ({weighted.get('indirect_weight', 20)}%)", header_cell),
+            Paragraph("Indirect Att.", header_cell),
             Paragraph("Combined %", header_cell),
-            Paragraph("Combined Attainment", header_cell),
+            Paragraph("Combined Att.", header_cell),
             Paragraph("Attainment Level", header_cell),
         ]
         w_rows = [w_headers]
@@ -517,7 +544,7 @@ def create_pdf_report(report_data: Dict[str, Any], include_charts: bool = True, 
                 Paragraph(str(w.get('combined_attainment')), bold_cell),
                 Paragraph(str(w.get('level_label')), bold_cell),
             ])
-        w_table = Table(w_rows, colWidths=[0.5*inch, 0.7*inch, 0.85*inch, 0.75*inch, 0.7*inch, 0.85*inch, 0.75*inch, 0.7*inch, 1.1*inch, 1.1*inch])
+        w_table = Table(w_rows, colWidths=[35, 50, 60, 55, 50, 60, 55, 50, 60, 65])
         w_table.setStyle(TableStyle([
             ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#1E293B')),
             ('GRID', (0, 0), (-1, -1), 0.3, colors.HexColor('#CBD5E1')),
@@ -530,8 +557,8 @@ def create_pdf_report(report_data: Dict[str, Any], include_charts: bool = True, 
         elements.append(w_table)
         elements.append(Spacer(1, 8))
 
-    # Section 4a: CO-PO & PSO Correlation Matrix (PO1..PO11, PSO1..PSO3)
-    if copo.get("matrix") and copo.get("po_list") and copo.get("co_list"):
+    # Section 4a: CO-PO & PSO Correlation Matrix (PO1..PO11, PSO1..PSO3) (Include for "all" or "copo")
+    if section in ["all", "copo"] and copo.get("matrix") and copo.get("po_list") and copo.get("co_list"):
         elements.append(Paragraph("4a. Course Outcome to Program Outcome Correlation Matrix", h2_style))
         matrix = copo.get("matrix", {})
         po_list = copo.get("po_list", [])
@@ -546,8 +573,8 @@ def create_pdf_report(report_data: Dict[str, Any], include_charts: bool = True, 
                 row_cells.append(Paragraph(val_str, normal_cell))
             m_rows.append(row_cells)
 
-        col_w = min(0.48 * inch, 6.4 * inch / max(1, len(po_list) + 1))
-        m_table = Table(m_rows, colWidths=[0.65 * inch] + [col_w] * len(po_list))
+        col_w = min(35, (540 - 45) / max(1, len(po_list)))
+        m_table = Table(m_rows, colWidths=[45] + [col_w] * len(po_list))
         m_table.setStyle(TableStyle([
             ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#0F766E')),
             ('GRID', (0, 0), (-1, -1), 0.3, colors.HexColor('#CBD5E1')),
@@ -560,8 +587,8 @@ def create_pdf_report(report_data: Dict[str, Any], include_charts: bool = True, 
         elements.append(m_table)
         elements.append(Spacer(1, 8))
 
-    # Section 4b: PO & PSO Attainment Table
-    if copo.get("po_results"):
+    # Section 4b: PO & PSO Attainment Table (Include for "all" or "copo")
+    if section in ["all", "copo"] and copo.get("po_results"):
         elements.append(Paragraph("4b. Program Outcome (PO &amp; PSO) Attainment Results", h2_style))
         po_headers = [
             Paragraph("PO / PSO", header_cell),
@@ -580,7 +607,7 @@ def create_pdf_report(report_data: Dict[str, Any], include_charts: bool = True, 
                 Paragraph(att_3, bold_cell),
                 Paragraph(str(p.get('level_label')), bold_cell),
             ])
-        po_table = Table(po_rows, colWidths=[1.3*inch, 1.5*inch, 1.5*inch, 1.5*inch, 1.6*inch])
+        po_table = Table(po_rows, colWidths=[75, 115, 115, 115, 120])
         po_table.setStyle(TableStyle([
             ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#2563EB')),
             ('GRID', (0, 0), (-1, -1), 0.3, colors.HexColor('#CBD5E1')),
@@ -593,39 +620,35 @@ def create_pdf_report(report_data: Dict[str, Any], include_charts: bool = True, 
         elements.append(po_table)
         elements.append(Spacer(1, 8))
 
-    # Section 5: All Visual Analytics Profile (Including all 3 graphs from Page 2 + Comparison Graph)
+    # Section 5: Visual Analytics Profile (Filtered appropriately by section)
     if include_charts:
-        elements.append(PageBreak())
-        elements.append(Paragraph("5. Visual Analytics &amp; Course Outcome Performance Profiles", h2_style))
-        elements.append(Spacer(1, 4))
+        charts_to_show = []
+        if section in ["all", "assessment"]:
+            c1 = create_co_passing_drawing(direct)
+            if c1:
+                charts_to_show.append(("<b>Graph 1: Students Passing Each Course Outcome (&ge;50% Marks)</b>", c1))
+            c2 = create_direct_attainment_drawing(direct)
+            if c2:
+                charts_to_show.append(("<b>Graph 2: Direct Course Outcome Attainment Scores (0-3 Points Scale)</b>", c2))
+        
+        if section == "all":
+            c4 = create_co_barchart_drawing(weighted)
+            if c4:
+                charts_to_show.append(("<b>Graph 3: Course Outcome Attainment Comparison (Green: Direct | Amber: Indirect | Red: Combined)</b>", c4))
 
-        # Chart 1: Students Passing Each CO
-        c1 = create_co_passing_drawing(direct)
-        if c1:
-            elements.append(Paragraph("<b>Graph 1: Students Passing Each Course Outcome (&ge;50% Marks)</b>", bold_cell))
-            elements.append(c1)
-            elements.append(Spacer(1, 10))
+        if section in ["all", "copo"]:
+            c5 = create_po_barchart_drawing(copo)
+            if c5:
+                charts_to_show.append(("<b>Graph 4: Program Outcome (PO &amp; PSO) Attainment Profile (0-3 Points Scale)</b>", c5))
 
-        # Chart 2: Direct CO Attainment
-        c2 = create_direct_attainment_drawing(direct)
-        if c2:
-            elements.append(Paragraph("<b>Graph 2: Direct Course Outcome Attainment Scores (0-3 Points Scale)</b>", bold_cell))
-            elements.append(c2)
-            elements.append(Spacer(1, 10))
-
-        # Chart 3: Direct vs Indirect vs Combined Comparison (Green to Red)
-        c4 = create_co_barchart_drawing(weighted)
-        if c4:
-            elements.append(Paragraph("<b>Graph 3: Course Outcome Attainment Comparison (Green: Direct | Amber: Indirect | Red: Combined)</b>", bold_cell))
-            elements.append(c4)
-            elements.append(Spacer(1, 10))
-
-        # Chart 4: PO & PSO Attainment Profile
-        c5 = create_po_barchart_drawing(copo)
-        if c5:
-            elements.append(Paragraph("<b>Graph 4: Program Outcome (PO &amp; PSO) Attainment Profile (0-3 Points Scale)</b>", bold_cell))
-            elements.append(c5)
-            elements.append(Spacer(1, 10))
+        if charts_to_show:
+            elements.append(PageBreak())
+            elements.append(Paragraph("Visual Analytics &amp; Performance Profiles", h2_style))
+            elements.append(Spacer(1, 4))
+            for title_text, drawing in charts_to_show:
+                elements.append(Paragraph(title_text, bold_cell))
+                elements.append(drawing)
+                elements.append(Spacer(1, 10))
 
     # Faculty & Authority Signatures block
     elements.append(Spacer(1, 14))

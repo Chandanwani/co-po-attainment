@@ -1220,7 +1220,7 @@ function proceedPage2PdfDownload() {
     }
   }
   closePage2PdfModal();
-  window.location.href = `/download/assessment-pdf?charts=${charts}`;
+  downloadFileWithState(`/download/assessment-pdf?charts=${charts}`, 'CO_Assessment_Report.pdf');
 }
 
 // Auto-restore previous calculations when navigating back to Page 2

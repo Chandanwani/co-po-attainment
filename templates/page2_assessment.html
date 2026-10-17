@@ -190,7 +190,7 @@
           <button type="button" class="btn btn-sm" style="background: #dc2626; border-color: #dc2626; color: #fff; font-weight: 600;" onclick="openPage2PdfModal()">
             📄 Download Assessment PDF
           </button>
-          <a href="{{ url_for('download_direct_report') }}" class="btn btn-outline btn-sm">
+          <a href="{{ url_for('download_direct_report') }}" class="btn btn-outline btn-sm" onclick="event.preventDefault(); downloadFileWithState('{{ url_for('download_direct_report') }}', 'Direct_Attainment.xlsx')">
             &darr; Direct Excel (.xlsx)
           </a>
         </div>
@@ -296,7 +296,7 @@
           <p class="card-subtitle">Simplified breakdown of total marks, percentages, and passed COs per student.</p>
         </div>
         <div>
-          <a href="{{ url_for('download_students_report') }}" class="btn btn-outline btn-sm">&darr; Download Students Report (.xlsx)</a>
+          <a href="{{ url_for('download_students_report') }}" class="btn btn-outline btn-sm" onclick="event.preventDefault(); downloadFileWithState('{{ url_for('download_students_report') }}', 'Students_Performance_Report.xlsx')">&darr; Download Students Report (.xlsx)</a>
         </div>
       </div>
       <div class="table-responsive" style="max-height: 350px; overflow-y: auto;">
@@ -329,7 +329,7 @@
           </p>
         </div>
         <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
-          <a href="{{ url_for('download_learners_pdf') }}" id="btnDownloadLearnersPdf" class="btn btn-sm" style="background: #4f46e5; border-color: #4338ca; color: #fff; font-weight: 600;">
+          <a href="{{ url_for('download_learners_pdf') }}" id="btnDownloadLearnersPdf" class="btn btn-sm" style="background: #4f46e5; border-color: #4338ca; color: #fff; font-weight: 600;" onclick="event.preventDefault(); downloadFileWithState('{{ url_for('download_learners_pdf') }}', 'Slow_and_Advanced_Learners_Report.pdf')">
             📄 Download Slow &amp; Advanced Learners PDF
           </a>
         </div>

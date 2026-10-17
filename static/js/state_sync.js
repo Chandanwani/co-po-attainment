@@ -66,6 +66,45 @@ async function syncStateToBackend(overrideState) {
   }
 }
 
+/**
+ * Universal state-preserving file downloader.
+ * Sends the current full sessionStorage state with the request so serverless environments
+ * (e.g. Vercel lambdas) always receive and render complete data without blank/empty reports.
+ */
+async function downloadFileWithState(url, defaultFilename) {
+  const stored = getStoredState();
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(stored || {})
+    });
+    
+    if (res.ok) {
+      const blob = await res.blob();
+      let filename = defaultFilename;
+      const disp = res.headers.get('Content-Disposition');
+      if (disp && disp.includes('filename=')) {
+        const match = disp.match(/filename=["']?([^"';]+)["']?/);
+        if (match && match[1]) filename = match[1];
+      }
+      const blobUrl = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = blobUrl;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => window.URL.revokeObjectURL(blobUrl), 2000);
+      return;
+    }
+  } catch (e) {
+    console.warn('POST download failed, falling back to window.location:', e);
+  }
+  // Fallback to standard browser navigation
+  window.location.href = url;
+}
+
 // Automatically sync on page load ONLY within an active ongoing session
 window.addEventListener('DOMContentLoaded', async () => {
   // If user opens Page 1 fresh (no ?nav=1), clear storage and do not restore old data
