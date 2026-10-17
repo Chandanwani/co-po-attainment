@@ -15,11 +15,6 @@
           Faculty: <strong>{{ teacher.faculty_name }}</strong> &bull;
           Class: {{ teacher.class_name or 'N/A' }} ({{ teacher.division or 'A' }}) &bull;
           Academic Year: {{ teacher.academic_year or 'N/A' }}
-          {% if teacher.course_type == 'practical' %}
-            &bull; <span class="badge" style="background:#e0e7ff; color:#3730a3; font-weight:700;">🧪 Practical Course{% if teacher.batch %} (Batch: {{ teacher.batch }}){% endif %}</span>
-          {% else %}
-            &bull; <span class="badge" style="background:#f1f5f9; color:#475569; font-weight:600;">📖 Theory Course</span>
-          {% endif %}
         </p>
       </div>
       <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
@@ -62,17 +57,10 @@
       </div>
     </div>
 
-    <!-- Upload Tabs & Scratch Creator -->
-    <div class="tabs" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
-      <div style="display: flex; gap: 4px;">
-        <button type="button" class="tab-btn active" onclick="switchDirectTab('file')">Upload File (CSV, TSV, XLSX)</button>
-        <button type="button" class="tab-btn" onclick="switchDirectTab('paste')">Paste Spreadsheet Data</button>
-      </div>
-      <div>
-        <button type="button" class="btn btn-outline btn-sm" onclick="openCreateSheetModal()" style="border-color: #6366f1; color: #4338ca; background: #eef2ff; font-weight: 700;">
-          ✨ Create Sheet from Scratch (No File Needed)
-        </button>
-      </div>
+    <!-- Upload Tabs -->
+    <div class="tabs">
+      <button type="button" class="tab-btn active" onclick="switchDirectTab('file')">Upload File (CSV, TSV, XLSX)</button>
+      <button type="button" class="tab-btn" onclick="switchDirectTab('paste')">Paste Spreadsheet Data</button>
     </div>
 
     <div id="directFileTab" class="tab-content active">
@@ -112,15 +100,11 @@
       </div>
 
       <div style="display: flex; gap: 10px; align-items: center; background: #f8fafc; border: 1px solid #e2e8f0; padding: 8px 12px; border-radius: 6px; margin-bottom: 12px; font-size: 12.5px; flex-wrap: wrap;">
-        <span style="font-weight: 700; color: var(--primary);" id="batchMarksToolTitle">
-          {% if teacher.course_type == 'practical' %}⚡ Batch Experiment Max Marks:{% else %}⚡ Batch CCE Max Marks:{% endif %}
-        </span>
-        <span style="color: var(--text-muted);" id="batchMarksToolDesc">
-          {% if teacher.course_type == 'practical' %}Set max marks for all Exp / Lab columns (e.g. 25):{% else %}Set max marks for all CCE columns:{% endif %}
-        </span>
-        <input type="number" id="batchCCEMaxInput" class="form-control" style="width: 70px; padding: 2px 6px; font-size: 12px; height: 28px;" value="{% if teacher.course_type == 'practical' %}25{% else %}10{% endif %}" min="1" step="0.5">
-        <button type="button" class="btn btn-outline btn-sm" onclick="applyBatchCCEMaxMarks()" id="batchMarksToolBtn" style="font-size: 12px; padding: 3px 10px;">
-          {% if teacher.course_type == 'practical' %}Apply to All Experiment Columns{% else %}Apply to All CCE Columns{% endif %}
+        <span style="font-weight: 700; color: var(--primary);">⚡ Batch CCE Max Marks:</span>
+        <span style="color: var(--text-muted);">Set max marks for all CCE columns:</span>
+        <input type="number" id="batchCCEMaxInput" class="form-control" style="width: 70px; padding: 2px 6px; font-size: 12px; height: 28px;" value="10" min="1" step="0.5">
+        <button type="button" class="btn btn-outline btn-sm" onclick="applyBatchCCEMaxMarks()" style="font-size: 12px; padding: 3px 10px;">
+          Apply to All CCE Columns
         </button>
       </div>
 
@@ -153,7 +137,6 @@
         </h3>
         <div style="display: flex; gap: 8px; flex-wrap: wrap;">
           <button type="button" class="btn btn-outline btn-sm" id="btnFixNegative" onclick="fixNegativeMarks()" style="display: none; color: #b45309; border-color: #f59e0b;">&#9888; Auto-Fix Negative Marks (&rarr; 0)</button>
-          <button type="button" class="btn btn-outline btn-sm" onclick="openAddColumnModal()" style="border-color: #3b82f6; color: #1d4ed8; font-weight: 600;">+ Add Column / Experiment</button>
           <button type="button" class="btn btn-outline btn-sm" onclick="addDirectRow()">+ Add Student Row</button>
           <button type="button" class="btn btn-outline btn-sm" onclick="calculateDirectAttainment()">Re-calculate</button>
         </div>
@@ -767,162 +750,9 @@
     </div>
   </div>
 
-  <!-- Modal: Create Blank Assessment Sheet from Scratch -->
-  <div id="createSheetModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(15,23,42,0.6); z-index: 9999; align-items: center; justify-content: center; overflow-y: auto; padding: 20px;">
-    <div class="card" style="max-width: 560px; width: 100%; background: #ffffff; padding: 24px; border-radius: 12px; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.3); max-height: 90vh; overflow-y: auto;">
-      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
-        <h3 style="font-size: 17px; font-weight: 700; color: var(--primary); margin: 0;">✨ Create Assessment Sheet from Scratch</h3>
-        <button type="button" onclick="closeCreateSheetModal()" style="background: none; border: none; font-size: 22px; cursor: pointer; color: var(--text-muted); line-height: 1;">&times;</button>
-      </div>
-      <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 16px;">
-        No file to upload? Initialize a structured assessment sheet directly with customized experiments/tests, CO mappings, and student rows.
-      </p>
-
-      <!-- Course Nature in Modal -->
-      <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px; margin-bottom: 16px;">
-        <label style="font-size: 12.5px; font-weight: 700; color: #1e293b; display: block; margin-bottom: 6px;">Course Nature / Structure:</label>
-        <div style="display: flex; gap: 16px;">
-          <label style="font-size: 13px; font-weight: 600; cursor: pointer;">
-            <input type="radio" name="modalCourseType" value="practical" id="modalRadioPractical" onchange="onModalCourseTypeChange()" {% if teacher.course_type == 'practical' %}checked{% endif %}>
-            🧪 Practical / Laboratory Course
-          </label>
-          <label style="font-size: 13px; font-weight: 600; cursor: pointer;">
-            <input type="radio" name="modalCourseType" value="theory" id="modalRadioTheory" onchange="onModalCourseTypeChange()" {% if teacher.course_type != 'practical' %}checked{% endif %}>
-            📖 Theory Course
-          </label>
-        </div>
-      </div>
-
-      <!-- Practical Options Form -->
-      <div id="modalPracticalOptions" style="{% if teacher.course_type != 'practical' %}display: none;{% endif %}">
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
-          <div>
-            <label style="font-size: 12.5px; font-weight: 600;">Number of Experiments:</label>
-            <input type="number" id="scratchExpCount" class="form-control" value="10" min="1" max="25">
-          </div>
-          <div>
-            <label style="font-size: 12.5px; font-weight: 600;">Max Marks per Experiment:</label>
-            <input type="number" id="scratchExpMaxMarks" class="form-control" value="25" min="1" step="0.5">
-          </div>
-        </div>
-
-        <div style="margin-bottom: 12px;">
-          <label style="font-size: 12.5px; font-weight: 600; display: block; margin-bottom: 4px;">Experiment CO Mapping Strategy:</label>
-          <select id="scratchExpCOStrategy" class="form-control" style="font-size: 12.5px;">
-            <option value="2_per_co" selected>2 Experiments per CO (Exp 1-2 &rarr; CO1, Exp 3-4 &rarr; CO2, Exp 5-6 &rarr; CO3, Exp 7-8 &rarr; CO4, Exp 9-10 &rarr; CO5)</option>
-            <option value="1_per_co">1 Experiment per CO (Exp 1 &rarr; CO1, Exp 2 &rarr; CO2, Exp 3 &rarr; CO3...)</option>
-            <option value="all_cos">All Experiments map to All COs (CO1 to CO5)</option>
-          </select>
-        </div>
-
-        <div style="background: #f1f5f9; border-radius: 6px; padding: 10px; margin-bottom: 12px;">
-          <label style="display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; cursor: pointer; margin-bottom: 6px;">
-            <input type="checkbox" id="scratchIncludePROR" checked>
-            <span>Include Practical / Oral (PR/OR) Exam Column</span>
-          </label>
-          <div style="display: flex; gap: 10px; align-items: center; margin-left: 24px; font-size: 12px;">
-            <span>Max Marks:</span>
-            <input type="number" id="scratchPRORMax" class="form-control" style="width: 70px; height: 26px; padding: 2px 6px;" value="25" min="1">
-            <span style="color: var(--text-muted);">(Maps to CO1, CO2, CO3, CO4, CO5)</span>
-          </div>
-        </div>
-      </div>
-
-      <!-- Theory Options Form -->
-      <div id="modalTheoryOptions" style="{% if teacher.course_type == 'practical' %}display: none;{% endif %}">
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
-          <div>
-            <label style="font-size: 12.5px; font-weight: 600;">Unit Tests (UTs):</label>
-            <input type="number" id="scratchUTCount" class="form-control" value="2" min="1" max="5">
-          </div>
-          <div>
-            <label style="font-size: 12.5px; font-weight: 600;">UT Max Marks:</label>
-            <input type="number" id="scratchUTMax" class="form-control" value="20" min="1">
-          </div>
-        </div>
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
-          <div>
-            <label style="font-size: 12.5px; font-weight: 600;">CCE / Assignments:</label>
-            <input type="number" id="scratchCCECount" class="form-control" value="5" min="1" max="10">
-          </div>
-          <div>
-            <label style="font-size: 12.5px; font-weight: 600;">CCE Max Marks:</label>
-            <input type="number" id="scratchCCEMax" class="form-control" value="10" min="1">
-          </div>
-        </div>
-        <div style="background: #f1f5f9; border-radius: 6px; padding: 10px; margin-bottom: 12px;">
-          <label style="display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; cursor: pointer;">
-            <input type="checkbox" id="scratchIncludeESE" checked>
-            <span>Include End Semester Exam (ESE - 70 Marks, CO1-CO5)</span>
-          </label>
-        </div>
-      </div>
-
-      <!-- Common Student Setup -->
-      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 14px;">
-        <div>
-          <label style="font-size: 12.5px; font-weight: 600;">Number of Students:</label>
-          <input type="number" id="scratchStudentCount" class="form-control" value="{% if teacher.course_type == 'practical' %}20{% else %}60{% endif %}" min="1" max="250">
-        </div>
-        <div>
-          <label style="font-size: 12.5px; font-weight: 600;">Starting Roll Number:</label>
-          <input type="number" id="scratchStartRoll" class="form-control" value="101" min="1">
-        </div>
-      </div>
-
-      <div style="margin-bottom: 18px;">
-        <label style="font-size: 12.5px; font-weight: 600; display: block; margin-bottom: 4px;">Initial Student Marks:</label>
-        <select id="scratchMarksInitMode" class="form-control" style="font-size: 12.5px;">
-          <option value="empty" selected>Empty Marks (I will type marks in table)</option>
-          <option value="sample">Generate Sample Passing Marks (65%–90% realistic marks for quick testing)</option>
-          <option value="zeros">Fill All with 0 (Absent / Placeholder)</option>
-        </select>
-      </div>
-
-      <div style="display: flex; justify-content: flex-end; gap: 10px;">
-        <button type="button" class="btn btn-outline btn-sm" onclick="closeCreateSheetModal()">Cancel</button>
-        <button type="button" class="btn btn-primary btn-sm" onclick="buildSheetFromScratch()" style="background: #4f46e5; border-color: #4f46e5;">
-          ✨ Generate Sheet &amp; Open Table
-        </button>
-      </div>
-    </div>
-  </div>
-
-  <!-- Modal: Add Custom Column / Experiment -->
-  <div id="addColumnModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(15,23,42,0.6); z-index: 9999; align-items: center; justify-content: center; padding: 20px;">
-    <div class="card" style="max-width: 440px; width: 100%; background: #ffffff; padding: 22px; border-radius: 12px; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.3);">
-      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
-        <h3 style="font-size: 16px; font-weight: 700; color: var(--primary); margin: 0;">➕ Add New Assessment Column / Experiment</h3>
-        <button type="button" onclick="closeAddColumnModal()" style="background: none; border: none; font-size: 22px; cursor: pointer; color: var(--text-muted); line-height: 1;">&times;</button>
-      </div>
-      <div class="form-group mb-12">
-        <label class="form-label" style="font-size: 12.5px; font-weight: 600;">Column Name:</label>
-        <input type="text" id="newColNameInput" class="form-control" placeholder="e.g. Exp 11, Mini Project, Mock PR, CCE6">
-      </div>
-      <div class="form-group mb-12">
-        <label class="form-label" style="font-size: 12.5px; font-weight: 600;">Maximum Marks:</label>
-        <input type="number" id="newColMaxMarksInput" class="form-control" value="25" min="1" step="0.5">
-      </div>
-      <div class="form-group mb-16">
-        <label class="form-label" style="font-size: 12.5px; font-weight: 600;">Mapped Course Outcomes (comma-separated):</label>
-        <input type="text" id="newColMappedCOsInput" class="form-control" value="CO1" placeholder="e.g. CO1, CO2">
-        <small style="color: var(--text-muted); font-size: 11.5px;">Multiple practicals or tests can map to the same CO.</small>
-      </div>
-      <div style="display: flex; justify-content: flex-end; gap: 10px;">
-        <button type="button" class="btn btn-outline btn-sm" onclick="closeAddColumnModal()">Cancel</button>
-        <button type="button" class="btn btn-primary btn-sm" onclick="confirmAddNewColumn()">
-          Add Column to Sheet
-        </button>
-      </div>
-    </div>
-  </div>
-
 </div>
 {% endblock %}
 
 {% block scripts %}
-<script>
-  const currentTeacher = {{ teacher | tojson | safe }};
-</script>
 <script src="{{ url_for('static', filename='js/app.js') }}"></script>
 {% endblock %}

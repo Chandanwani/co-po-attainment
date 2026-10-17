@@ -219,13 +219,24 @@ def page1_teacher():
 
 @app.route('/assessment')
 def page2_assessment():
-    """Page 2: Direct and indirect assessment data."""
+    """Page 2: Direct and indirect assessment data for Theory courses."""
     sid = get_session_id()
     teacher = TEMP_DATA_STORE[sid].get('teacher', {})
     if not teacher.get('faculty_name') and 'teacher' in session:
         teacher = session['teacher']
         TEMP_DATA_STORE[sid]['teacher'] = teacher
     return render_template('page2_assessment.html', teacher=teacher, page_step=2)
+
+
+@app.route('/practical-assessment')
+def page2_practical():
+    """Page 2 (Practical): Dedicated Laboratory Assessment data, scratch experiment builder, and attainment."""
+    sid = get_session_id()
+    teacher = TEMP_DATA_STORE[sid].get('teacher', {})
+    if not teacher.get('faculty_name') and 'teacher' in session:
+        teacher = session['teacher']
+        TEMP_DATA_STORE[sid]['teacher'] = teacher
+    return render_template('page2_practical.html', teacher=teacher, page_step=2)
 
 
 @app.route('/copo')
@@ -297,7 +308,8 @@ def api_save_teacher():
     TEMP_DATA_STORE[sid]['teacher'] = teacher_info
     session['teacher'] = teacher_info
     save_session_state(sid)
-    return jsonify({'success': True, 'teacher': teacher_info, 'redirect': url_for('page2_assessment')})
+    target_redirect = url_for('page2_practical') if course_type == 'practical' else url_for('page2_assessment')
+    return jsonify({'success': True, 'teacher': teacher_info, 'redirect': target_redirect})
 
 
 @app.route('/api/sync-state', methods=['POST'])

@@ -1,0 +1,589 @@
+{% extends "base.html" %}
+
+{% block title %}Laboratory Assessment &amp; Attainment - CO-PO Attainment{% endblock %}
+
+{% block content %}
+<div class="container">
+
+  <!-- Header Banner -->
+  <div class="card mb-16" style="padding: 16px 20px; background: #ffffff;">
+    <div class="flex-between">
+      <div>
+        <h1 style="font-size: 20px; font-weight: 700; color: var(--primary);">Laboratory Assessment &amp; Attainment Evaluation</h1>
+        <p style="color: var(--text-muted); font-size: 13px;">
+          Subject: <strong style="color: var(--primary);">{{ teacher.subject }}</strong> &bull;
+          Faculty: <strong>{{ teacher.faculty_name }}</strong> &bull;
+          Class: {{ teacher.class_name or 'N/A' }} ({{ teacher.division or 'A' }}) &bull;
+          Academic Year: {{ teacher.academic_year or 'N/A' }} &bull;
+          <span class="badge" style="background:#e0e7ff; color:#3730a3; font-weight:700;">🧪 Practical Course{% if teacher.batch %} (Batch: {{ teacher.batch }}){% endif %}</span>
+        </p>
+      </div>
+      <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+        <a href="{{ url_for('page1_teacher') }}?nav=1" class="btn btn-outline btn-sm">&larr; Edit Course Info</a>
+        <button type="button" id="btnPage2PdfTop" class="btn btn-outline btn-sm" style="display: none; color: #dc2626; border-color: #fca5a5;" onclick="openPage2PdfModal()">📄 Download Assessment PDF</button>
+        <a href="{{ url_for('page3_copo') }}" id="btnGoToStep3" class="btn btn-primary btn-sm" style="display: none;">Continue to CO-PO Mapping &rarr;</a>
+      </div>
+    </div>
+  </div>
+
+  <!-- Weights Configuration Banner -->
+  <div class="card mb-16" style="padding: 14px 20px; background: #f8fafc;">
+    <div class="flex-between">
+      <div>
+        <strong style="color: var(--primary); font-size: 14px;">Attainment Weightage Configuration:</strong>
+        <span style="font-size: 13px; color: var(--text-muted); margin-left: 8px;">
+          OBE standard weightage is 80% Direct Laboratory Assessment and 20% Indirect Assessment.
+        </span>
+      </div>
+      <div style="display: flex; align-items: center; gap: 12px;">
+        <label style="font-size: 13px; font-weight: 600;">
+          Direct Weight (%):
+          <input type="number" id="directWeightInput" class="form-control" style="width: 70px; display: inline-block; padding: 4px 8px; margin-left: 4px;" value="80" min="0" max="100" onchange="handleWeightChange()">
+        </label>
+        <label style="font-size: 13px; font-weight: 600;">
+          Indirect Weight (%):
+          <input type="number" id="indirectWeightInput" class="form-control" style="width: 70px; display: inline-block; padding: 4px 8px; margin-left: 4px;" value="20" min="0" max="100" onchange="handleWeightChange()">
+        </label>
+        <span id="weightSumBadge" class="badge" style="background: #e2e8f0; font-size: 12px;">Total: 100%</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Section 1: Laboratory Marks Upload or Scratch Sheet Builder -->
+  <div class="card">
+    <div class="card-header">
+      <div>
+        <h2 class="card-title">1. Direct Laboratory Marks (Continuous Experiments &amp; PR/OR Exam)</h2>
+        <p class="card-subtitle">Upload a practical sheet, paste table rows, or create a blank laboratory sheet from scratch.</p>
+      </div>
+    </div>
+
+    <!-- Upload & Scratch Tabs -->
+    <div class="tabs">
+      <button type="button" class="tab-btn active" onclick="switchDirectTab('scratch')">✨ Create Blank Lab Sheet from Scratch</button>
+      <button type="button" class="tab-btn" onclick="switchDirectTab('file')">Upload File (CSV, TSV, XLSX)</button>
+      <button type="button" class="tab-btn" onclick="switchDirectTab('paste')">Paste Spreadsheet Data</button>
+    </div>
+
+    <!-- Tab 1: Scratch Sheet Builder -->
+    <div id="directScratchTab" class="tab-content active">
+      <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 16px; margin-bottom: 12px;">
+        <h3 style="font-size: 14.5px; font-weight: 700; color: var(--primary); margin-bottom: 4px;">
+          🛠️ Configure Laboratory Sheet (Experiments &amp; Student List)
+        </h3>
+        <p style="font-size: 12.5px; color: var(--text-muted); margin-bottom: 14px;">
+          Define your practical experiments, max marks, and paste your student names and roll numbers. All marks start blank for you to enter directly in the table.
+        </p>
+
+        <!-- Student Names & Roll Numbers -->
+        <div class="form-group mb-12">
+          <label class="form-label" style="font-weight: 700; font-size: 13px;">
+            Student Roll Numbers &amp; Names (Paste from Excel / Attendance Sheet):
+          </label>
+          <p style="font-size: 12px; color: var(--text-muted); margin-top: -4px; margin-bottom: 6px;">
+            Paste rows with Roll No and Student Name (one student per line, tab/comma separated). If left empty, student rows will be auto-numbered below.
+          </p>
+          <textarea id="scratchStudentsInput" class="form-control" rows="4" placeholder="101&#9;Aarav Sharma&#10;102&#9;Ananya Patil&#10;103&#9;Rohan Kulkarni&#10;104&#9;Pooja Shinde"></textarea>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 14px;">
+          <div>
+            <label style="font-size: 12.5px; font-weight: 600;">Or Number of Blank Student Rows (if not pasting):</label>
+            <input type="number" id="scratchStudentCount" class="form-control" value="20" min="1" max="250">
+          </div>
+          <div>
+            <label style="font-size: 12.5px; font-weight: 600;">Starting Roll Number:</label>
+            <input type="number" id="scratchStartRoll" class="form-control" value="101" min="1">
+          </div>
+        </div>
+
+        <!-- Experiments & CO Mapping -->
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
+          <div>
+            <label style="font-size: 12.5px; font-weight: 600;">Number of Experiments:</label>
+            <input type="number" id="scratchExpCount" class="form-control" value="10" min="1" max="25">
+          </div>
+          <div>
+            <label style="font-size: 12.5px; font-weight: 600;">Default Max Marks per Experiment:</label>
+            <input type="number" id="scratchExpMaxMarks" class="form-control" value="25" min="1" step="0.5">
+          </div>
+        </div>
+
+        <div class="form-group mb-12">
+          <label style="font-size: 12.5px; font-weight: 600;">Experiment to CO Mapping Pattern:</label>
+          <select id="scratchExpCOStrategy" class="form-control" style="font-size: 13px;">
+            <option value="2_per_co" selected>2 Experiments per CO (Exp 1-2 &rarr; CO1, Exp 3-4 &rarr; CO2, Exp 5-6 &rarr; CO3, Exp 7-8 &rarr; CO4, Exp 9-10 &rarr; CO5)</option>
+            <option value="1_per_co">1 Experiment per CO (Exp 1 &rarr; CO1, Exp 2 &rarr; CO2, Exp 3 &rarr; CO3...)</option>
+            <option value="all_cos">All Experiments map to All COs (CO1 to CO5)</option>
+          </select>
+        </div>
+
+        <div style="background: #f1f5f9; border-radius: 6px; padding: 10px; margin-bottom: 16px;">
+          <label style="display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; cursor: pointer; margin-bottom: 6px;">
+            <input type="checkbox" id="scratchIncludePROR" checked>
+            <span>Include Practical / Oral (PR/OR) Exam Column</span>
+          </label>
+          <div style="display: flex; gap: 10px; align-items: center; margin-left: 24px; font-size: 12px;">
+            <span>Max Marks:</span>
+            <input type="number" id="scratchPRORMax" class="form-control" style="width: 70px; height: 26px; padding: 2px 6px;" value="25" min="1">
+            <span style="color: var(--text-muted);">(Mapped to CO1, CO2, CO3, CO4, CO5)</span>
+          </div>
+        </div>
+
+        <button type="button" class="btn btn-primary" onclick="buildPracticalSheetFromScratch()" style="background: #4f46e5; border-color: #4f46e5; font-weight: 700;">
+          ✨ Generate Blank Practical Sheet
+        </button>
+      </div>
+    </div>
+
+    <!-- Tab 2: File Upload -->
+    <div id="directFileTab" class="tab-content">
+      <div style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap;">
+        <input type="file" id="directFileInput" accept=".csv, .tsv, .txt, .xlsx, .xls" class="form-control" style="max-width: 360px;" onchange="handleFileSelected('directFileInput', 'directFileBadge')">
+        <div id="directFileBadge" class="file-chosen-badge" style="display: none;">
+          <span id="directFileBadgeName" class="file-name-text"></span>
+          <button type="button" class="btn-clear-file" onclick="clearFileSelection('directFileInput', 'directFileBadge', 'directErrorAlert')" title="Remove selected file">&times;</button>
+        </div>
+        <button type="button" class="btn btn-primary" onclick="uploadDirectFile()">Parse Practical Marks File</button>
+        <span style="font-size: 12px; color: var(--text-muted);">Max file size: 16MB</span>
+      </div>
+    </div>
+
+    <!-- Tab 3: Paste Data -->
+    <div id="directPasteTab" class="tab-content">
+      <div class="form-group">
+        <label class="form-label">Paste practical rows directly from Excel / Google Sheets (with headers):</label>
+        <textarea id="directPasteInput" class="form-control" rows="5" placeholder="Roll No&#9;Student Name&#9;Exp 1&#9;Exp 2&#9;PR/OR&#10;101&#9;Aarav Sharma&#9;22&#9;24&#9;21"></textarea>
+      </div>
+      <button type="button" class="btn btn-primary btn-sm" onclick="uploadDirectPasted()">Parse Pasted Practical Data</button>
+    </div>
+
+    <!-- Direct Status Alerts -->
+    <div id="directErrorAlert" class="alert alert-error mt-16" style="display: none; white-space: pre-line;"></div>
+    <div id="directSuccessAlert" class="alert alert-success mt-16" style="display: none; white-space: pre-line;"></div>
+    <div id="directWarningAlert" class="alert alert-warning mt-16" style="display: none; white-space: pre-line;"></div>
+
+    <!-- Assessment Column Configuration Card -->
+    <div id="columnConfigSection" class="mt-24" style="display: none;">
+      <div class="flex-between mb-12">
+        <div>
+          <h3 style="font-size: 15px; font-weight: 700; color: var(--primary);">Laboratory Assessment Columns &amp; CO Mapping</h3>
+          <p style="font-size: 12.5px; color: var(--text-muted); margin-top: 2px;">
+            Verify or adjust Maximum Marks and CO mappings. Multiple practicals mapping to the same CO will be automatically aggregated.
+          </p>
+        </div>
+      </div>
+
+      <!-- Batch Max Marks Tool for Practical -->
+      <div style="display: flex; gap: 10px; align-items: center; background: #f8fafc; border: 1px solid #e2e8f0; padding: 8px 12px; border-radius: 6px; margin-bottom: 12px; font-size: 12.5px; flex-wrap: wrap;">
+        <span style="font-weight: 700; color: var(--primary);">⚡ Batch Experiment Max Marks:</span>
+        <span style="color: var(--text-muted);">Set max marks for all Exp / Lab columns:</span>
+        <input type="number" id="batchExpMaxInput" class="form-control" style="width: 70px; padding: 2px 6px; font-size: 12px; height: 28px;" value="25" min="1" step="0.5">
+        <button type="button" class="btn btn-outline btn-sm" onclick="applyBatchExpMaxMarks()" style="font-size: 12px; padding: 3px 10px;">
+          Apply to All Experiment Columns
+        </button>
+      </div>
+
+      <div id="columnConfigGrid" class="grid-3 mb-16">
+        <!-- Dynamically populated column cards -->
+      </div>
+
+      <div class="flex-between">
+        <div style="display: flex; gap: 12px; align-items: center;">
+          <label style="font-size: 13px; font-weight: 600;">Passing Threshold Ratio:</label>
+          <select id="passingThresholdSelect" class="form-control" style="width: auto; padding: 4px 8px;">
+            <option value="0.50" selected>50% of Maximum Marks (GAPC/OBE Standard)</option>
+            <option value="0.40">40% of Maximum Marks</option>
+            <option value="0.60">60% of Maximum Marks</option>
+          </select>
+        </div>
+        <div>
+          <button type="button" class="btn btn-success" onclick="calculateDirectAttainment()">
+            &check; Validate &amp; Calculate Direct Attainment
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Direct Marks Large Editable Table -->
+    <div id="directTableSection" class="mt-24" style="display: none;">
+      <div class="flex-between mb-12">
+        <h3 style="font-size: 15px; font-weight: 700; color: var(--primary);">
+          Editable Practical Student Marks (<span id="directStudentCount">0</span> Students)
+        </h3>
+        <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+          <button type="button" class="btn btn-outline btn-sm" id="btnFixNegative" onclick="fixNegativeMarks()" style="display: none; color: #b45309; border-color: #f59e0b;">&#9888; Auto-Fix Negative Marks (&rarr; 0)</button>
+          <button type="button" class="btn btn-outline btn-sm" onclick="openAddColumnModal()" style="border-color: #3b82f6; color: #1d4ed8; font-weight: 600;">+ Add Experiment / Column</button>
+          <button type="button" class="btn btn-outline btn-sm" onclick="addDirectRow()">+ Add Student Row</button>
+          <button type="button" class="btn btn-outline btn-sm" onclick="calculateDirectAttainment()">Re-calculate</button>
+        </div>
+      </div>
+
+      <div class="table-responsive" style="max-height: 420px; overflow-y: auto;">
+        <table class="table table-editable table-sm" id="directMarksTable">
+          <thead>
+            <!-- Populated dynamically -->
+          </thead>
+          <tbody>
+            <!-- Populated dynamically -->
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Direct Attainment Live Results & Summaries -->
+  <div id="directResultsSection" style="display: none;">
+    
+    <!-- Stat Summary Cards -->
+    <div class="grid-4 mb-16">
+      <div class="stat-card">
+        <div class="stat-val" id="statDirectAppeared">0</div>
+        <div class="stat-label">Total Evaluated Students</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-val" id="statDirectPassed">0</div>
+        <div class="stat-label">Students Passed (>=50%)</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-val" id="statDirectAvgScore">0%</div>
+        <div class="stat-label">Average Performance</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-val" id="statDirectCOCount">0</div>
+        <div class="stat-label">Mapped Course Outcomes</div>
+      </div>
+    </div>
+
+    <!-- Direct CO Summary Table -->
+    <div class="card mb-16">
+      <div class="card-header">
+        <div>
+          <h3 class="card-title">Direct Laboratory Course Outcome (CO) Summary</h3>
+          <p class="card-subtitle">OBE direct attainment levels with multi-experiment aggregation and GAPC 4.0 level points.</p>
+        </div>
+        <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+          <button type="button" class="btn btn-sm" style="background: #dc2626; border-color: #dc2626; color: #fff; font-weight: 600;" onclick="openPage2PdfModal()">
+            📄 Download Assessment PDF
+          </button>
+          <a href="{{ url_for('download_direct_report') }}" class="btn btn-outline btn-sm" onclick="event.preventDefault(); downloadFileWithState('{{ url_for('download_direct_report') }}', 'Laboratory_Direct_Attainment.xlsx')">
+            &darr; Direct Excel (.xlsx)
+          </a>
+        </div>
+      </div>
+      <div class="table-responsive">
+        <table class="table" id="directCOSummaryTable">
+          <thead>
+            <tr>
+              <th>Course Outcome</th>
+              <th>Mapped Experiments</th>
+              <th>Students Passed (%)</th>
+              <th style="background:#fef3c7; color:#92400e;">Continuous Lab Attainment</th>
+              <th style="background:#ede9fe; color:#5b21b6;">PR/OR Exam Attainment</th>
+              <th style="background:#e0f2fe; color:#0369a1;">Direct Attainment (Points)</th>
+              <th>Attainment Level (Points)</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Experiment / Assessment Passing Summary -->
+    <div class="card mb-16">
+      <div class="card-header">
+        <div>
+          <h3 class="card-title">Laboratory Evaluation Tools Passing Summary</h3>
+          <p class="card-subtitle">Performance breakdown for each experiment and practical exam.</p>
+        </div>
+      </div>
+      <div class="table-responsive">
+        <table class="table" id="assessmentSummaryTable">
+          <thead>
+            <tr>
+              <th>Experiment / Tool</th>
+              <th>Mapped COs</th>
+              <th>Max Marks</th>
+              <th>Passing Mark (50%)</th>
+              <th>Appeared</th>
+              <th>Passed</th>
+              <th>Failed</th>
+              <th>Pass %</th>
+              <th>Average Marks</th>
+              <th>Min Scored</th>
+              <th>Max Scored</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Student-wise Percentages & Passing COs Table -->
+    <div class="card mb-16">
+      <div class="card-header">
+        <div>
+          <h3 class="card-title">Student Performance &amp; Passing COs</h3>
+          <p class="card-subtitle">Simplified breakdown of total marks, percentages, and passed COs per student.</p>
+        </div>
+        <div>
+          <a href="{{ url_for('download_students_report') }}" class="btn btn-outline btn-sm" onclick="event.preventDefault(); downloadFileWithState('{{ url_for('download_students_report') }}', 'Laboratory_Students_Performance_Report.xlsx')">&darr; Download Students Report (.xlsx)</a>
+        </div>
+      </div>
+      <div class="table-responsive" style="max-height: 350px; overflow-y: auto;">
+        <table class="table table-sm" id="studentSummaryTable">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Roll No</th>
+              <th>Student Name</th>
+              <th>Total Marks</th>
+              <th>Percentage</th>
+              <th>Passed COs</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Direct Charts Section -->
+    <div class="card mb-16">
+      <div class="card-header">
+        <h3 class="card-title">Visual Analytics - Direct Laboratory Attainment</h3>
+      </div>
+      <div class="grid-2">
+        <div class="graph-card">
+          <h4 class="graph-title">Graph 1: Practical CO Passing Percentage</h4>
+          <div class="chart-canvas-wrapper" style="height: 220px;">
+            <canvas id="chartCOPassPercent"></canvas>
+          </div>
+        </div>
+        <div class="graph-card">
+          <h4 class="graph-title">Graph 2: Direct Practical Attainment Levels (0 to 3)</h4>
+          <div class="chart-canvas-wrapper" style="height: 220px;">
+            <canvas id="chartCOAttainment"></canvas>
+          </div>
+        </div>
+        <div class="graph-card">
+          <h4 class="graph-title">Graph 3: Student Laboratory Score Distribution</h4>
+          <div class="chart-canvas-wrapper" style="height: 220px;">
+            <canvas id="chartScoreDistribution"></canvas>
+          </div>
+        </div>
+        <div class="graph-card">
+          <h4 class="graph-title">Graph 4: Experiment Passing Rates</h4>
+          <div class="chart-canvas-wrapper" style="height: 220px;">
+            <canvas id="chartAssessmentPass"></canvas>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Section 2: Indirect Assessment Data (Optional Exit Survey) -->
+  <div class="card mb-16">
+    <div class="card-header">
+      <div>
+        <h2 class="card-title">2. Indirect Assessment (Laboratory Exit Feedback / Survey)</h2>
+        <p class="card-subtitle">Upload survey feedback ratings or paste survey columns (supports 5-point and 10-point scales).</p>
+      </div>
+      <div>
+        <label style="font-size: 13px; font-weight: 600;">Rating Scale:</label>
+        <select id="ratingScaleSelect" class="form-control" style="width: auto; display: inline-block; padding: 4px 8px;">
+          <option value="10" selected>10-point Scale (1 to 10)</option>
+          <option value="5">5-point Scale (1 to 5)</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="tabs">
+      <button type="button" class="tab-btn active" onclick="switchIndirectTab('file')">Upload Survey File</button>
+      <button type="button" class="tab-btn" onclick="switchIndirectTab('paste')">Paste Survey Data</button>
+    </div>
+
+    <div id="indirectFileTab" class="tab-content active">
+      <div style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap;">
+        <input type="file" id="indirectFileInput" accept=".csv, .tsv, .txt, .xlsx, .xls" class="form-control" style="max-width: 360px;" onchange="handleFileSelected('indirectFileInput', 'indirectFileBadge')">
+        <div id="indirectFileBadge" class="file-chosen-badge" style="display: none;">
+          <span id="indirectFileBadgeName" class="file-name-text"></span>
+          <button type="button" class="btn-clear-file" onclick="clearFileSelection('indirectFileInput', 'indirectFileBadge', 'indirectErrorAlert')" title="Remove selected file">&times;</button>
+        </div>
+        <button type="button" class="btn btn-primary" onclick="uploadIndirectFile()">Parse Indirect Survey</button>
+      </div>
+    </div>
+
+    <div id="indirectPasteTab" class="tab-content">
+      <div class="form-group">
+        <label class="form-label">Paste survey columns (with CO1, CO2... headers):</label>
+        <textarea id="indirectPasteInput" class="form-control" rows="5" placeholder="Roll No&#9;CO1&#9;CO2&#9;CO3&#9;CO4&#9;CO5&#10;101&#9;9&#9;8&#9;10&#9;9&#9;8"></textarea>
+      </div>
+      <button type="button" class="btn btn-primary btn-sm" onclick="uploadIndirectPasted()">Parse Pasted Survey</button>
+    </div>
+
+    <div id="indirectErrorAlert" class="alert alert-error mt-16" style="display: none; white-space: pre-line;"></div>
+    <div id="indirectSuccessAlert" class="alert alert-success mt-16" style="display: none; white-space: pre-line;"></div>
+
+    <!-- Indirect Results Section -->
+    <div id="indirectResultsSection" class="mt-24" style="display: none;">
+      <div class="grid-3 mb-16">
+        <div class="stat-card">
+          <div class="stat-val" id="statIndirectResponses">0</div>
+          <div class="stat-label">Survey Responses Collected</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-val" id="statIndirectAvgRating">0</div>
+          <div class="stat-label">Average Student Rating</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-val" id="statIndirectAttainment">0 / 3.00</div>
+          <div class="stat-label">Indirect Attainment Score</div>
+        </div>
+      </div>
+
+      <div class="table-responsive mb-16">
+        <table class="table" id="indirectCOSummaryTable">
+          <thead>
+            <tr>
+              <th>Course Outcome</th>
+              <th>Average Rating</th>
+              <th>Rating %</th>
+              <th>Indirect Attainment (Points)</th>
+              <th>Attainment Level</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+
+      <div class="grid-2">
+        <div class="graph-card">
+          <h4 class="graph-title">Graph 5: Indirect Survey Rating %</h4>
+          <div class="chart-canvas-wrapper" style="height: 220px;">
+            <canvas id="chartIndirectRatingPercent"></canvas>
+          </div>
+        </div>
+        <div class="graph-card">
+          <h4 class="graph-title">Graph 6: Indirect Attainment Points</h4>
+          <div class="chart-canvas-wrapper" style="height: 220px;">
+            <canvas id="chartIndirectAttainment"></canvas>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Section 3: Weighted Combined Attainment Live Section -->
+  <div id="combinedAttainmentSection" class="card mb-16" style="display: none;">
+    <div class="card-header">
+      <div>
+        <h2 class="card-title">3. Weighted Combined Course Outcome Attainment</h2>
+        <p class="card-subtitle">Continuous OBE direct (80%) + indirect (20%) weighted combined attainment.</p>
+      </div>
+      <div>
+        <span class="badge" id="overallCombinedBadge" style="font-size: 14px; padding: 6px 12px; background: #dbeafe; color: #1e40af; border-color: #93c5fd;">
+          Overall: - / 3.00
+        </span>
+      </div>
+    </div>
+
+    <div class="table-responsive">
+      <table class="table" id="combinedAttainmentTable">
+        <thead>
+          <tr>
+            <th>Course Outcome</th>
+            <th>Direct %</th>
+            <th>Direct Attainment</th>
+            <th>Indirect %</th>
+            <th>Indirect Attainment</th>
+            <th>Combined %</th>
+            <th>Combined Attainment (Points)</th>
+            <th>Attainment Level (Points)</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+
+    <div class="graph-card mt-24">
+      <div class="graph-header">
+        <h4 class="graph-title">Graph 7: Practical Attainment Comparison (Direct vs. Indirect vs. Combined)</h4>
+      </div>
+      <div class="chart-canvas-wrapper" style="height: 230px;">
+        <canvas id="chartCombinedAttainment"></canvas>
+      </div>
+    </div>
+
+    <div class="mt-24 text-right">
+      <a href="{{ url_for('page3_copo') }}" class="btn btn-primary btn-lg">
+        Proceed to Step 3: CO-PO Mapping &rarr;
+      </a>
+    </div>
+  </div>
+
+  <!-- Interactive Modal for Page 2 Assessment PDF Download Options -->
+  <div id="page2PdfModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(15,23,42,0.6); z-index: 9999; align-items: center; justify-content: center;">
+    <div class="card" style="max-width: 440px; width: 90%; background: #ffffff; padding: 22px; border-radius: 12px; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.3);">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+        <h3 style="font-size: 16.5px; font-weight: 700; color: var(--primary); margin: 0;">Download Laboratory Assessment PDF</h3>
+        <button type="button" onclick="closePage2PdfModal()" style="background: none; border: none; font-size: 22px; cursor: pointer; color: var(--text-muted); line-height: 1;">&times;</button>
+      </div>
+      <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 14px;">
+        Would you like to include visual analytics and comparison charts in the generated Laboratory Assessment PDF?
+      </p>
+      <div style="background: #f8fafc; padding: 12px 14px; border-radius: 8px; border: 1px solid var(--border-color); margin-bottom: 18px;">
+        <label style="display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; cursor: pointer; margin-bottom: 10px;">
+          <input type="radio" name="page2PdfChartOption" value="1" checked>
+          <span>Include Visual Charts &amp; Analytics (With Graphs)</span>
+        </label>
+        <label style="display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; cursor: pointer;">
+          <input type="radio" name="page2PdfChartOption" value="0">
+          <span>Accreditation Tables Only (Without Graphs)</span>
+        </label>
+      </div>
+      <div style="display: flex; justify-content: flex-end; gap: 10px;">
+        <button type="button" class="btn btn-outline btn-sm" onclick="closePage2PdfModal()">Cancel</button>
+        <button type="button" class="btn btn-primary btn-sm" style="background: #dc2626; border-color: #dc2626; color: #fff;" onclick="proceedPage2PdfDownload()">
+          &darr; Download PDF
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Add Custom Experiment / Column -->
+  <div id="addColumnModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(15,23,42,0.6); z-index: 9999; align-items: center; justify-content: center; padding: 20px;">
+    <div class="card" style="max-width: 440px; width: 100%; background: #ffffff; padding: 22px; border-radius: 12px; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.3);">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+        <h3 style="font-size: 16px; font-weight: 700; color: var(--primary); margin: 0;">➕ Add New Experiment / Column</h3>
+        <button type="button" onclick="closeAddColumnModal()" style="background: none; border: none; font-size: 22px; cursor: pointer; color: var(--text-muted); line-height: 1;">&times;</button>
+      </div>
+      <div class="form-group mb-12">
+        <label class="form-label" style="font-size: 12.5px; font-weight: 600;">Experiment / Column Name:</label>
+        <input type="text" id="newColNameInput" class="form-control" placeholder="e.g. Exp 11, Mini Project, Mock Viva">
+      </div>
+      <div class="form-group mb-12">
+        <label class="form-label" style="font-size: 12.5px; font-weight: 600;">Maximum Marks:</label>
+        <input type="number" id="newColMaxMarksInput" class="form-control" value="25" min="1" step="0.5">
+      </div>
+      <div class="form-group mb-16">
+        <label class="form-label" style="font-size: 12.5px; font-weight: 600;">Mapped Course Outcomes (comma-separated):</label>
+        <input type="text" id="newColMappedCOsInput" class="form-control" value="CO1" placeholder="e.g. CO1, CO2">
+        <small style="color: var(--text-muted); font-size: 11.5px;">Multiple practicals can map to the same CO.</small>
+      </div>
+      <div style="display: flex; justify-content: flex-end; gap: 10px;">
+        <button type="button" class="btn btn-outline btn-sm" onclick="closeAddColumnModal()">Cancel</button>
+        <button type="button" class="btn btn-primary btn-sm" onclick="confirmAddNewColumn()">
+          Add Column to Sheet
+        </button>
+      </div>
+    </div>
+  </div>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/practical.js') }}"></script>
+{% endblock %}

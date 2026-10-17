@@ -206,286 +206,19 @@ function renderColumnConfigs(configs) {
   });
 }
 
-// Scratch Sheet Builder & Custom Column Management
-function openCreateSheetModal() {
-  const modal = document.getElementById('createSheetModal');
-  if (modal) modal.style.display = 'flex';
-}
-
-function closeCreateSheetModal() {
-  const modal = document.getElementById('createSheetModal');
-  if (modal) modal.style.display = 'none';
-}
-
-function onModalCourseTypeChange() {
-  const isPrac = document.getElementById('modalRadioPractical') && document.getElementById('modalRadioPractical').checked;
-  const pracOpts = document.getElementById('modalPracticalOptions');
-  const theoOpts = document.getElementById('modalTheoryOptions');
-  const countInp = document.getElementById('scratchStudentCount');
-  if (isPrac) {
-    if (pracOpts) pracOpts.style.display = 'block';
-    if (theoOpts) theoOpts.style.display = 'none';
-    if (countInp && (!countInp.value || countInp.value == '60')) countInp.value = '20';
-  } else {
-    if (pracOpts) pracOpts.style.display = 'none';
-    if (theoOpts) theoOpts.style.display = 'block';
-    if (countInp && (!countInp.value || countInp.value == '20')) countInp.value = '60';
-  }
-}
-
-function buildSheetFromScratch() {
-  const isPrac = document.getElementById('modalRadioPractical') ? document.getElementById('modalRadioPractical').checked : false;
-  const numStudents = parseInt(document.getElementById('scratchStudentCount').value) || 20;
-  const startRoll = parseInt(document.getElementById('scratchStartRoll').value) || 101;
-  const initMode = document.getElementById('scratchMarksInitMode') ? document.getElementById('scratchMarksInitMode').value : 'empty';
-
-  const configs = [];
-
-  if (isPrac) {
-    const expCount = parseInt(document.getElementById('scratchExpCount').value) || 10;
-    const expMax = parseFloat(document.getElementById('scratchExpMaxMarks').value) || 25;
-    const coStrat = document.getElementById('scratchExpCOStrategy') ? document.getElementById('scratchExpCOStrategy').value : '2_per_co';
-
-    for (let i = 1; i <= expCount; i++) {
-      let mappedCOs = ['CO1'];
-      if (coStrat === '2_per_co') {
-        const coIdx = Math.min(5, Math.floor((i - 1) / 2) + 1);
-        mappedCOs = [`CO${coIdx}`];
-      } else if (coStrat === '1_per_co') {
-        const coIdx = Math.min(6, i);
-        mappedCOs = [`CO${coIdx}`];
-      } else {
-        mappedCOs = ['CO1', 'CO2', 'CO3', 'CO4', 'CO5'];
-      }
-      configs.push({
-        name: `Exp ${i}`,
-        max_marks: expMax,
-        mapped_cos: mappedCOs,
-        checked: true
-      });
-    }
-
-    const incPROR = document.getElementById('scratchIncludePROR') && document.getElementById('scratchIncludePROR').checked;
-    if (incPROR) {
-      const prorMax = parseFloat(document.getElementById('scratchPRORMax').value) || 25;
-      configs.push({
-        name: 'PR/OR Exam',
-        max_marks: prorMax,
-        mapped_cos: ['CO1', 'CO2', 'CO3', 'CO4', 'CO5'],
-        checked: true
-      });
-    }
-  } else {
-    // Theory course
-    const utCount = parseInt(document.getElementById('scratchUTCount').value) || 2;
-    const utMax = parseFloat(document.getElementById('scratchUTMax').value) || 20;
-    for (let i = 1; i <= utCount; i++) {
-      let utCos = (i === 1) ? ['CO1', 'CO2'] : (i === 2 ? ['CO3', 'CO4'] : ['CO5', 'CO6']);
-      configs.push({
-        name: `UT${i}`,
-        max_marks: utMax,
-        mapped_cos: utCos,
-        checked: true
-      });
-    }
-
-    const cceCount = parseInt(document.getElementById('scratchCCECount').value) || 5;
-    const cceMax = parseFloat(document.getElementById('scratchCCEMax').value) || 10;
-    for (let i = 1; i <= cceCount; i++) {
-      const coNum = Math.min(6, i);
-      configs.push({
-        name: `CCE${i}`,
-        max_marks: cceMax,
-        mapped_cos: [`CO${coNum}`],
-        checked: true
-      });
-    }
-
-    const incESE = document.getElementById('scratchIncludeESE') && document.getElementById('scratchIncludeESE').checked;
-    if (incESE) {
-      configs.push({
-        name: 'ESE',
-        max_marks: 70,
-        mapped_cos: ['CO1', 'CO2', 'CO3', 'CO4', 'CO5'],
-        checked: true
-      });
-    }
-  }
-
-  // Generate students
-  const students = [];
-  for (let sIdx = 0; sIdx < numStudents; sIdx++) {
-    const roll = startRoll + sIdx;
-    const marks = {};
-    configs.forEach(c => {
-      if (initMode === 'sample') {
-        // Realistic score: 65% - 92% of max marks
-        const pct = 0.65 + (Math.random() * 0.27);
-        marks[c.name] = Math.round(c.max_marks * pct * 10) / 10;
-      } else if (initMode === 'zeros') {
-        marks[c.name] = 0;
-      } else {
-        marks[c.name] = '';
-      }
-    });
-    students.push({
-      roll_no: String(roll),
-      name: `Student ${sIdx + 1}`,
-      marks: marks
-    });
-  }
-
-  currentDirectRaw = {
-    success: true,
-    students: students,
-    column_configs: configs
-  };
-
-  closeCreateSheetModal();
-  renderColumnConfigs(configs);
-  renderDirectTable(students, configs);
-  document.getElementById('columnConfigSection').style.display = 'block';
-  document.getElementById('directTableSection').style.display = 'block';
-
-  // Update batch tool text and value based on course type
-  const batchTitle = document.getElementById('batchMarksToolTitle');
-  const batchDesc = document.getElementById('batchMarksToolDesc');
-  const batchBtn = document.getElementById('batchMarksToolBtn');
-  const batchInp = document.getElementById('batchCCEMaxInput');
-  if (isPrac) {
-    if (batchTitle) batchTitle.textContent = '⚡ Batch Experiment Max Marks:';
-    if (batchDesc) batchDesc.textContent = 'Set max marks for all Exp / Lab columns (e.g. 25):';
-    if (batchBtn) batchBtn.textContent = 'Apply to All Experiment Columns';
-    if (batchInp) batchInp.value = 25;
-  } else {
-    if (batchTitle) batchTitle.textContent = '⚡ Batch CCE Max Marks:';
-    if (batchDesc) batchDesc.textContent = 'Set max marks for all CCE columns:';
-    if (batchBtn) batchBtn.textContent = 'Apply to All CCE Columns';
-    if (batchInp) batchInp.value = 10;
-  }
-
-  showDirectSuccess(`Assessment sheet initialized successfully with ${students.length} students and ${configs.length} assessment columns (${isPrac ? 'Practical' : 'Theory'}). You can edit marks and click "Validate & Calculate Direct Attainment".`);
-  setTimeout(() => {
-    document.getElementById('columnConfigSection').scrollIntoView({ behavior: 'smooth', block: 'start' });
-  }, 100);
-
-  // If sample marks, auto-calculate
-  if (initMode === 'sample') {
-    setTimeout(() => {
-      calculateDirectAttainment();
-    }, 400);
-  }
-}
-
-// Add Custom Column
-function openAddColumnModal() {
-  const modal = document.getElementById('addColumnModal');
-  if (modal) {
-    const isPrac = (typeof currentTeacher !== 'undefined' && currentTeacher && currentTeacher.course_type === 'practical') ||
-                   (document.getElementById('modalRadioPractical') && document.getElementById('modalRadioPractical').checked);
-    const nameInp = document.getElementById('newColNameInput');
-    const maxInp = document.getElementById('newColMaxMarksInput');
-    if (nameInp) nameInp.value = isPrac ? 'Exp ' : 'CCE ';
-    if (maxInp) maxInp.value = isPrac ? 25 : 10;
-    modal.style.display = 'flex';
-  }
-}
-
-function closeAddColumnModal() {
-  const modal = document.getElementById('addColumnModal');
-  if (modal) modal.style.display = 'none';
-}
-
-function confirmAddNewColumn() {
-  const nameInp = document.getElementById('newColNameInput');
-  const maxInp = document.getElementById('newColMaxMarksInput');
-  const cosInp = document.getElementById('newColMappedCOsInput');
-
-  const colName = nameInp ? nameInp.value.trim() : '';
-  const maxMarks = maxInp ? parseFloat(maxInp.value) : 25;
-  const mappedCos = cosInp ? cosInp.value.split(',').map(s => s.trim().toUpperCase()).filter(Boolean) : ['CO1'];
-
-  if (!colName) {
-    alert('Please enter a column name.');
-    return;
-  }
-  if (isNaN(maxMarks) || maxMarks <= 0) {
-    alert('Please enter a valid positive maximum marks value.');
-    return;
-  }
-  if (mappedCos.length === 0) {
-    alert('Please specify at least one mapped Course Outcome (e.g. CO1).');
-    return;
-  }
-
-  // Preserve existing edits from table before rebuilding
-  const currentData = collectDirectDataFromUI();
-  let students = [];
-  let configs = [];
-
-  if (currentData && currentData.students && currentData.students.length > 0) {
-    students = currentData.students;
-    configs = currentData.column_configs;
-  } else if (currentDirectRaw && currentDirectRaw.students) {
-    students = currentDirectRaw.students;
-    configs = currentDirectRaw.column_configs || [];
-  } else {
-    alert('Please upload data or initialize a sheet before adding new columns.');
-    return;
-  }
-
-  // Check duplicate column name
-  if (configs.some(c => c.name.toLowerCase() === colName.toLowerCase())) {
-    alert(`A column named "${colName}" already exists. Please choose a unique name.`);
-    return;
-  }
-
-  const newCol = {
-    name: colName,
-    max_marks: maxMarks,
-    mapped_cos: mappedCos,
-    checked: true
-  };
-  configs.push(newCol);
-
-  // Add empty mark cell to each student
-  students.forEach(s => {
-    if (!s.marks) s.marks = {};
-    s.marks[colName] = '';
-  });
-
-  currentDirectRaw = {
-    success: true,
-    students: students,
-    column_configs: configs
-  };
-
-  closeAddColumnModal();
-  renderColumnConfigs(configs);
-  renderDirectTable(students, configs);
-  showDirectSuccess(`Added assessment column "${colName}" (${maxMarks} Marks, Mapped to ${mappedCos.join(', ')}).`);
-}
-
 function applyBatchCCEMaxMarks() {
   const batchInp = document.getElementById('batchCCEMaxInput');
   if (!batchInp) return;
   const val = parseFloat(batchInp.value);
   if (isNaN(val) || val <= 0) {
-    alert('Please enter a valid positive number for Max Marks.');
+    alert('Please enter a valid positive number for CCE Max Marks.');
     return;
   }
   if (!currentDirectRaw || !currentDirectRaw.column_configs) return;
   
-  const isPractical = (typeof currentTeacher !== 'undefined' && currentTeacher && currentTeacher.course_type === 'practical') ||
-                      (document.getElementById('modalRadioPractical') && document.getElementById('modalRadioPractical').checked);
-  
   let appliedCount = 0;
   currentDirectRaw.column_configs.forEach((col, idx) => {
-    const isTarget = isPractical 
-      ? /exp|prac|lab/i.test(col.name) 
-      : /cce/i.test(col.name);
-
-    if (isTarget) {
+    if (/cce/i.test(col.name)) {
       col.max_marks = val;
       const inp = document.getElementById(`maxMarks_${idx}`);
       if (inp) {
@@ -497,11 +230,10 @@ function applyBatchCCEMaxMarks() {
   });
 
   if (appliedCount > 0) {
-    const targetLabel = isPractical ? 'experiment / lab' : 'CCE';
-    showDirectSuccess(`Updated max marks to ${val} for ${appliedCount} ${targetLabel} column(s).`);
+    showDirectSuccess(`Updated max marks to ${val} for ${appliedCount} CCE column(s).`);
     setTimeout(() => { hideDirectAlerts(); }, 3000);
   } else {
-    showDirectWarning(isPractical ? 'No Experiment/Lab column found in assessment columns.' : 'No CCE column found in current assessment columns.');
+    showDirectWarning('No CCE column found in current assessment columns.');
   }
 }
 
