@@ -961,7 +961,8 @@ def api_compute_copo():
         'po_results': result['po_results'],
         'mapping_averages': result.get('mapping_averages', {}),
         'overall_po_attainment': result['overall_po_attainment'],
-        'overall_po_level': result['overall_po_level']
+        'overall_po_level': result['overall_po_level'],
+        'has_indirect': bool(indirect_co_atts)
     }
 
     return jsonify({'success': True, 'data': TEMP_DATA_STORE[sid]['copo_computed']})

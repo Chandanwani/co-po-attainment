@@ -206,6 +206,37 @@ function renderColumnConfigs(configs) {
   });
 }
 
+function applyBatchCCEMaxMarks() {
+  const batchInp = document.getElementById('batchCCEMaxInput');
+  if (!batchInp) return;
+  const val = parseFloat(batchInp.value);
+  if (isNaN(val) || val <= 0) {
+    alert('Please enter a valid positive number for CCE Max Marks.');
+    return;
+  }
+  if (!currentDirectRaw || !currentDirectRaw.column_configs) return;
+  
+  let appliedCount = 0;
+  currentDirectRaw.column_configs.forEach((col, idx) => {
+    if (/cce/i.test(col.name)) {
+      col.max_marks = val;
+      const inp = document.getElementById(`maxMarks_${idx}`);
+      if (inp) {
+        inp.value = val;
+        onMaxMarksChange(idx);
+      }
+      appliedCount++;
+    }
+  });
+
+  if (appliedCount > 0) {
+    showDirectSuccess(`Updated max marks to ${val} for ${appliedCount} CCE column(s).`);
+    setTimeout(() => { hideDirectAlerts(); }, 3000);
+  } else {
+    showDirectWarning('No CCE column found in current assessment columns.');
+  }
+}
+
 let maxMarksTimer = null;
 function onMaxMarksChange(idx) {
   hideDirectError();
@@ -271,21 +302,36 @@ function toggleColumnCheck(idx) {
   const maxInp = document.getElementById(`maxMarks_${idx}`);
   const coInp = document.getElementById(`mappedCOs_${idx}`);
 
-  if (chk.checked) {
+  const isChecked = chk ? chk.checked : true;
+
+  if (currentDirectRaw && currentDirectRaw.column_configs && currentDirectRaw.column_configs[idx]) {
+    currentDirectRaw.column_configs[idx].checked = isChecked;
+  }
+
+  if (isChecked) {
     card.classList.remove('excluded');
     badge.textContent = 'Included';
     badge.style.background = '#dcfce7';
     badge.style.color = '#166534';
-    maxInp.disabled = false;
-    coInp.disabled = false;
+    if (maxInp) maxInp.disabled = false;
+    if (coInp) coInp.disabled = false;
   } else {
     card.classList.add('excluded');
     badge.textContent = 'Excluded';
     badge.style.background = '#fee2e2';
     badge.style.color = '#991b1b';
-    maxInp.disabled = true;
-    coInp.disabled = true;
+    if (maxInp) maxInp.disabled = true;
+    if (coInp) coInp.disabled = true;
   }
+
+  // Instantly hide or show column in the marks table
+  const th = document.getElementById(`thCol_${idx}`);
+  if (th) th.style.display = isChecked ? '' : 'none';
+
+  const cells = document.querySelectorAll(`.cell-col-${idx}`);
+  cells.forEach(td => {
+    td.style.display = isChecked ? '' : 'none';
+  });
 }
 
 function renderDirectTable(students, configs) {
@@ -295,8 +341,9 @@ function renderDirectTable(students, configs) {
   const tbody = table.querySelector('tbody');
 
   let thHtml = '<tr><th style="width: 50px;">#</th><th style="width: 100px;">Roll No</th><th>Student Name</th>';
-  configs.forEach(c => {
-    thHtml += `<th>${c.name}</th>`;
+  configs.forEach((c, idx) => {
+    const isVisible = (c.checked !== false);
+    thHtml += `<th id="thCol_${idx}" style="${isVisible ? '' : 'display: none;'}">${c.name}</th>`;
   });
   thHtml += '<th style="width: 50px;">Action</th></tr>';
   thead.innerHTML = thHtml;
@@ -311,13 +358,14 @@ function renderDirectTable(students, configs) {
       <td><input type="text" class="cell-input" data-field="roll" value="${s.roll_no || ''}"></td>
       <td><input type="text" class="cell-input" data-field="name" value="${s.name || ''}"></td>
     `;
-    configs.forEach(c => {
+    configs.forEach((c, idx) => {
+      const isVisible = (c.checked !== false);
       const val = s.marks ? (s.marks[c.name] ?? '') : '';
       const numVal = parseFloat(val);
       const isNeg = !isNaN(numVal) && numVal < 0;
       if (isNeg) hasNegative = true;
       const cellStyle = isNeg ? 'style="background-color: #fee2e2; border-color: #ef4444; color: #991b1b; font-weight: 700;" title="Negative mark: please correct or click Auto-Fix"' : '';
-      trHtml += `<td><input type="number" step="0.01" class="cell-input" data-col="${c.name}" value="${val}" ${cellStyle} oninput="onCellMarkInput(this)"></td>`;
+      trHtml += `<td class="cell-col-${idx}" style="${isVisible ? '' : 'display: none;'}"><input type="number" step="0.01" class="cell-input" data-col="${c.name}" value="${val}" ${cellStyle} oninput="onCellMarkInput(this)"></td>`;
     });
     trHtml += `<td class="text-center"><button type="button" class="btn btn-outline btn-sm" style="color:#ef4444;padding:2px 6px;" onclick="removeDirectRow(${rIdx})">&times;</button></td>`;
     tr.innerHTML = trHtml;
@@ -385,8 +433,9 @@ function addDirectRow() {
     <td><input type="text" class="cell-input" data-field="roll" value="S${rIdx + 1}"></td>
     <td><input type="text" class="cell-input" data-field="name" value="Student ${rIdx + 1}"></td>
   `;
-  currentDirectRaw.column_configs.forEach(c => {
-    trHtml += `<td><input type="number" step="0.01" class="cell-input" data-col="${c.name}" value="0"></td>`;
+  currentDirectRaw.column_configs.forEach((c, idx) => {
+    const isVisible = (c.checked !== false);
+    trHtml += `<td class="cell-col-${idx}" style="${isVisible ? '' : 'display: none;'}"><input type="number" step="0.01" class="cell-input" data-col="${c.name}" value="0"></td>`;
   });
   trHtml += `<td class="text-center"><button type="button" class="btn btn-outline btn-sm" style="color:#ef4444;padding:2px 6px;" onclick="removeDirectRow(${rIdx})">&times;</button></td>`;
   tr.innerHTML = trHtml;
@@ -575,8 +624,194 @@ function renderDirectResults(data) {
     tbodyStd.appendChild(tr);
   });
 
+  // Populate Assessment Targets in Learner Target Select
+  populateLearnerTargets(data.assessment_summaries);
+
+  // Trigger Slow and Fast Learners Categorization
+  updateLearnersCategorization(data);
+
+  // Save to client-side localStorage state manager
+  if (typeof saveStoredState === 'function') {
+    saveStoredState({ direct: data });
+  }
+
   // Render Charts
   renderDirectCharts(data);
+}
+
+let currentComputedDirect = null;
+let currentAssessmentSummaries = [];
+
+function populateLearnerTargets(summaries) {
+  const sel = document.getElementById('learnerTargetSelect');
+  if (!sel) return;
+  currentAssessmentSummaries = summaries || [];
+  const currVal = sel.value;
+  sel.innerHTML = '<option value="overall" data-max="100">Overall Aggregate Marks</option>';
+  if (summaries && summaries.length > 0) {
+    summaries.forEach(a => {
+      // Only include actual given assessment columns
+      const opt = document.createElement('option');
+      opt.value = a.name;
+      opt.setAttribute('data-max', a.max_marks || 100);
+      opt.textContent = `${a.name} (Max: ${a.max_marks})`;
+      sel.appendChild(opt);
+    });
+  }
+  if (currVal && Array.from(sel.options).some(o => o.value === currVal)) {
+    sel.value = currVal;
+  }
+  updateLearnerMaxLabels();
+}
+
+function setLearnerMode(mode) {
+  const sel = document.getElementById('learnerTargetSelect');
+  if (!sel) return;
+  if (mode === 'overall') {
+    sel.value = 'overall';
+  } else if (mode === 'individual') {
+    if (sel.value === 'overall' && sel.options.length > 1) {
+      sel.selectedIndex = 1;
+    }
+  }
+  onLearnerTargetChange();
+}
+
+function updateLearnerMaxLabels() {
+  const sel = document.getElementById('learnerTargetSelect');
+  if (!sel) return 100;
+  const selOpt = sel.options[sel.selectedIndex];
+  let maxMarks = 100;
+  if (sel.value === 'overall') {
+    if (currentComputedDirect && currentComputedDirect.students && currentComputedDirect.students.length > 0) {
+      const totMax = parseFloat(currentComputedDirect.students[0].total_max);
+      if (!isNaN(totMax) && totMax > 0) maxMarks = totMax;
+    } else if (currentAssessmentSummaries && currentAssessmentSummaries.length > 0) {
+      const sumMax = currentAssessmentSummaries.reduce((acc, a) => acc + (parseFloat(a.max_marks) || 0), 0);
+      if (sumMax > 0) maxMarks = sumMax;
+    }
+  } else if (selOpt) {
+    const dMax = parseFloat(selOpt.getAttribute('data-max'));
+    if (!isNaN(dMax) && dMax > 0) {
+      maxMarks = dMax;
+    }
+  }
+  const maxLabel = `/ ${maxMarks}`;
+  if (document.getElementById('lblSlowMax')) document.getElementById('lblSlowMax').textContent = maxLabel;
+  if (document.getElementById('lblFastMax')) document.getElementById('lblFastMax').textContent = maxLabel;
+  return maxMarks;
+}
+
+function onLearnerTargetChange() {
+  const maxMarks = updateLearnerMaxLabels();
+  // Suggest defaults: slow = 40% of max, advanced = 70% of max
+  const slowInp = document.getElementById('slowThresholdInput');
+  const fastInp = document.getElementById('fastThresholdInput');
+  if (slowInp && fastInp) {
+    slowInp.value = Math.round(maxMarks * 0.4 * 10) / 10;
+    fastInp.value = Math.round(maxMarks * 0.7 * 10) / 10;
+  }
+  updateLearnersCategorization();
+}
+
+async function updateLearnersCategorization(overrideDirect) {
+  const directData = overrideDirect || currentComputedDirect;
+  if (!directData || !directData.students) return;
+  currentComputedDirect = directData;
+
+  const target = document.getElementById('learnerTargetSelect') ? document.getElementById('learnerTargetSelect').value : 'overall';
+  const slowMarks = parseFloat(document.getElementById('slowThresholdInput') ? document.getElementById('slowThresholdInput').value : 12) || 12;
+  const fastMarks = parseFloat(document.getElementById('fastThresholdInput') ? document.getElementById('fastThresholdInput').value : 21) || 21;
+
+  // Update label indicators
+  if (document.getElementById('lblSlowThresh')) document.getElementById('lblSlowThresh').textContent = slowMarks;
+  if (document.getElementById('lblFastThresh')) document.getElementById('lblFastThresh').textContent = fastMarks;
+
+  try {
+    const res = await fetch('/api/categorize-learners', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        target_assessment: target,
+        threshold_mode: 'marks',
+        slow_threshold_marks: slowMarks,
+        fast_threshold_marks: fastMarks,
+        direct_computed: directData
+      })
+    });
+    const result = await res.json();
+    if (result.success && result.data) {
+      renderLearnersTables(result.data);
+      if (typeof saveStoredState === 'function') {
+        saveStoredState({ learners: result.data });
+      }
+    }
+  } catch (e) {
+    console.warn('Categorize learners error:', e);
+  }
+}
+
+function renderLearnersTables(data) {
+  const advCount = data.advanced_count !== undefined ? data.advanced_count : data.fast_count;
+  const advPct = data.advanced_pct !== undefined ? data.advanced_pct : data.fast_pct;
+  const advLearners = data.advanced_learners || data.fast_learners || [];
+  const advThresh = data.advanced_threshold_marks !== undefined ? data.advanced_threshold_marks : data.fast_threshold_marks;
+
+  // Update counts
+  if (document.getElementById('slowLearnerCount')) document.getElementById('slowLearnerCount').textContent = data.slow_count;
+  if (document.getElementById('slowLearnerPct')) document.getElementById('slowLearnerPct').textContent = `${data.slow_pct}% of cohort`;
+  if (document.getElementById('badgeSlowTotal')) document.getElementById('badgeSlowTotal').textContent = `${data.slow_count} Students`;
+
+  if (document.getElementById('fastLearnerCount')) document.getElementById('fastLearnerCount').textContent = advCount;
+  if (document.getElementById('fastLearnerPct')) document.getElementById('fastLearnerPct').textContent = `${advPct}% of cohort`;
+  if (document.getElementById('badgeFastTotal')) document.getElementById('badgeFastTotal').textContent = `${advCount} Students`;
+
+  if (data.slow_threshold_marks !== undefined && document.getElementById('lblSlowThresh')) {
+    document.getElementById('lblSlowThresh').textContent = data.slow_threshold_marks;
+  }
+  if (advThresh !== undefined && document.getElementById('lblFastThresh')) {
+    document.getElementById('lblFastThresh').textContent = advThresh;
+  }
+
+  // Render Slow Learners Table (Roll No, Name, Marks Obtained, Out Of)
+  const slowTbody = document.getElementById('slowLearnersTable') ? document.getElementById('slowLearnersTable').querySelector('tbody') : null;
+  if (slowTbody) {
+    slowTbody.innerHTML = '';
+    if (!data.slow_learners || data.slow_learners.length === 0) {
+      slowTbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted" style="padding: 16px;">No slow learners identified under this criteria.</td></tr>';
+    } else {
+      data.slow_learners.forEach(s => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td class="bold" style="color: #991b1b;">${s.roll_no}</td>
+          <td>${s.name}</td>
+          <td style="text-align: center; font-weight: 700; color: #991b1b;">${s.marks_obtained !== undefined ? s.marks_obtained : '-'}</td>
+          <td style="text-align: center; color: #64748b;">${s.max_marks !== undefined ? s.max_marks : '-'}</td>
+        `;
+        slowTbody.appendChild(tr);
+      });
+    }
+  }
+
+  // Render Advanced Learners Table (Roll No, Name, Marks Obtained, Out Of)
+  const fastTbody = document.getElementById('fastLearnersTable') ? document.getElementById('fastLearnersTable').querySelector('tbody') : null;
+  if (fastTbody) {
+    fastTbody.innerHTML = '';
+    if (!advLearners || advLearners.length === 0) {
+      fastTbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted" style="padding: 16px;">No advanced learners identified under this criteria.</td></tr>';
+    } else {
+      advLearners.forEach(s => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td class="bold" style="color: #166534;">${s.roll_no}</td>
+          <td>${s.name}</td>
+          <td style="text-align: center; font-weight: 700; color: #166534;">${s.marks_obtained !== undefined ? s.marks_obtained : '-'}</td>
+          <td style="text-align: center; color: #64748b;">${s.max_marks !== undefined ? s.max_marks : '-'}</td>
+        `;
+        fastTbody.appendChild(tr);
+      });
+    }
+  }
 }
 
 function renderDirectCharts(data) {
@@ -626,29 +861,7 @@ function renderDirectCharts(data) {
     }
   });
 
-  // Chart 3: Student Overall Performance Distribution
-  const ctxDist = document.getElementById('chartStudentPerformance');
-  if (chartInstances['chartStudentPerformance']) chartInstances['chartStudentPerformance'].destroy();
-  const ranges = data.score_ranges;
-  chartInstances['chartStudentPerformance'] = new Chart(ctxDist, {
-    type: 'bar',
-    data: {
-      labels: Object.keys(ranges),
-      datasets: [{
-        label: 'Student Count',
-        data: Object.values(ranges),
-        backgroundColor: ['#059669', '#2563eb', '#f59e0b', '#f97316', '#ef4444'],
-        borderRadius: 4
-      }]
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      scales: {
-        y: { beginAtZero: true, ticks: { precision: 0 } }
-      }
-    }
-  });
+
 
   // Chart 4: Assessment Passing %
   const ctxAss = document.getElementById('chartAssessmentPassRate');
@@ -762,27 +975,44 @@ function hideIndirectError() {
 
 function renderDetectedCOs(cos) {
   const container = document.getElementById('detectedCOsList');
+  if (!container) return;
   container.innerHTML = '';
-  cos.forEach(co => {
+  cos.forEach((co, idx) => {
     const badge = document.createElement('span');
     badge.className = 'badge';
     badge.style.background = '#e0f2fe';
     badge.style.color = '#0369a1';
-    badge.textContent = co;
+    badge.style.display = 'inline-flex';
+    badge.style.alignItems = 'center';
+    badge.style.gap = '6px';
+    badge.innerHTML = `<span>${co}</span><button type="button" onclick="removeIndirectColumn(${idx})" title="Remove ${co} column" style="border:none;background:none;color:#dc2626;cursor:pointer;font-weight:bold;padding:0;font-size:13px;line-height:1;">&times;</button>`;
     container.appendChild(badge);
   });
 }
 
 function renderIndirectTable(ratings, cos) {
   const table = document.getElementById('indirectRatingsTable');
+  if (!table) return;
   const thead = table.querySelector('thead');
   const tbody = table.querySelector('tbody');
 
-  let thHtml = '<tr><th style="width: 50px;">#</th>';
-  cos.forEach(co => {
-    thHtml += `<th>${co}</th>`;
+  let thHtml = '<tr><th style="width: 50px;" class="text-center">#</th>';
+  cos.forEach((co, cIdx) => {
+    thHtml += `
+      <th class="text-center" style="min-width: 80px; padding: 4px 6px;">
+        <div style="display: flex; flex-direction: column; align-items: center; gap: 3px;">
+          <input type="text" class="cell-input text-center bold indirect-co-header" 
+                 data-co-idx="${cIdx}" value="${co}" 
+                 style="font-size: 11.5px; width: 66px; padding: 2px 4px; border: 1px solid var(--border-color); background: #ffffff;"
+                 title="Click to rename this CO column"
+                 onchange="updateIndirectColumnName(${cIdx}, this.value)">
+          <button type="button" class="btn-col-cross" onclick="removeIndirectColumn(${cIdx})" title="Remove ${co} column" 
+                  style="border: none; background: #fee2e2; color: #dc2626; border-radius: 50%; width: 18px; height: 18px; font-size: 13px; font-weight: bold; cursor: pointer; display: flex; align-items: center; justify-content: center; line-height: 1; padding: 0;">&times;</button>
+        </div>
+      </th>
+    `;
   });
-  thHtml += '</tr>';
+  thHtml += '<th style="width: 60px;" class="text-center">Action</th></tr>';
   thead.innerHTML = thHtml;
 
   tbody.innerHTML = '';
@@ -791,11 +1021,101 @@ function renderIndirectTable(ratings, cos) {
     let trHtml = `<td class="text-center bold">${rIdx + 1}</td>`;
     cos.forEach(co => {
       const val = row[co] ?? '';
-      trHtml += `<td><input type="number" step="0.5" class="cell-input" data-co="${co}" value="${val}"></td>`;
+      trHtml += `<td><input type="number" step="0.5" class="cell-input" data-co="${co}" value="${val}" style="width: 100%; text-align: center;"></td>`;
     });
+    trHtml += `<td class="text-center"><button type="button" class="btn btn-outline btn-sm" style="color:#ef4444;padding:2px 6px;" onclick="removeIndirectRow(this)" title="Delete row">&times;</button></td>`;
     tr.innerHTML = trHtml;
     tbody.appendChild(tr);
   });
+}
+
+function updateIndirectColumnName(cIdx, newName) {
+  if (!currentIndirectRaw) return;
+  const clean = newName.trim().toUpperCase();
+  if (!clean) return;
+  const cos = currentIndirectRaw.detected_cos || [];
+  if (cIdx < 0 || cIdx >= cos.length) return;
+  const oldName = cos[cIdx];
+  if (oldName === clean) return;
+
+  cos[cIdx] = clean;
+  (currentIndirectRaw.ratings_data || []).forEach(row => {
+    if (row[oldName] !== undefined) {
+      row[clean] = row[oldName];
+      delete row[oldName];
+    }
+  });
+
+  renderDetectedCOs(cos);
+  renderIndirectTable(currentIndirectRaw.ratings_data, cos);
+  calculateIndirectAttainment();
+}
+
+function removeIndirectColumn(cIdx) {
+  if (!currentIndirectRaw) return;
+  const cos = currentIndirectRaw.detected_cos || [];
+  if (cIdx < 0 || cIdx >= cos.length) return;
+  const colName = cos[cIdx];
+  if (!confirm(`Are you sure you want to remove column ${colName}?`)) return;
+
+  cos.splice(cIdx, 1);
+  (currentIndirectRaw.ratings_data || []).forEach(row => {
+    delete row[colName];
+  });
+
+  renderDetectedCOs(cos);
+  renderIndirectTable(currentIndirectRaw.ratings_data, cos);
+  calculateIndirectAttainment();
+}
+
+function addIndirectColumn() {
+  if (!currentIndirectRaw) {
+    currentIndirectRaw = { detected_cos: [], ratings_data: [] };
+  }
+  const cos = currentIndirectRaw.detected_cos || [];
+  const nextNum = cos.length + 1;
+  const name = prompt('Enter Course Outcome column name (e.g. CO' + nextNum + '):', 'CO' + nextNum);
+  if (!name || !name.trim()) return;
+  const clean = name.trim().toUpperCase();
+  if (cos.includes(clean)) {
+    alert('Column already exists!');
+    return;
+  }
+  cos.push(clean);
+  (currentIndirectRaw.ratings_data || []).forEach(row => {
+    if (row[clean] === undefined) row[clean] = '';
+  });
+  renderDetectedCOs(cos);
+  renderIndirectTable(currentIndirectRaw.ratings_data, cos);
+}
+
+function addIndirectRow() {
+  const table = document.getElementById('indirectRatingsTable');
+  if (!table) return;
+  const tbody = table.querySelector('tbody');
+  const cos = currentIndirectRaw?.detected_cos || ['CO1', 'CO2', 'CO3', 'CO4', 'CO5'];
+  const rIdx = tbody.querySelectorAll('tr').length;
+
+  const tr = document.createElement('tr');
+  let trHtml = `<td class="text-center bold">${rIdx + 1}</td>`;
+  cos.forEach(co => {
+    trHtml += `<td><input type="number" step="0.5" class="cell-input" data-co="${co}" value="" style="width: 100%; text-align: center;"></td>`;
+  });
+  trHtml += `<td class="text-center"><button type="button" class="btn btn-outline btn-sm" style="color:#ef4444;padding:2px 6px;" onclick="removeIndirectRow(this)" title="Delete row">&times;</button></td>`;
+  tr.innerHTML = trHtml;
+  tbody.appendChild(tr);
+}
+
+function removeIndirectRow(btn) {
+  const tr = btn.closest('tr');
+  if (tr) {
+    tr.remove();
+    const rows = document.querySelectorAll('#indirectRatingsTable tbody tr');
+    rows.forEach((r, idx) => {
+      const firstCol = r.querySelector('td');
+      if (firstCol) firstCol.textContent = idx + 1;
+    });
+  }
 }
 
 function collectIndirectDataFromUI() {
@@ -840,6 +1160,9 @@ async function calculateIndirectAttainment() {
     }
 
     renderIndirectResults(result.data);
+    if (typeof saveStoredState === 'function') {
+      saveStoredState({ indirect: result.data });
+    }
     document.getElementById('indirectResultsSection').style.display = 'block';
 
     // Calculate weighted attainment
@@ -927,6 +1250,9 @@ async function calculateWeightedAttainment() {
     if (!result.success) return;
 
     renderWeightedResults(result.data);
+    if (typeof saveStoredState === 'function') {
+      saveStoredState({ weighted: result.data });
+    }
     document.getElementById('weightedSection').style.display = 'block';
   } catch (err) {
     console.error('Weighted calculation error:', err);
@@ -968,19 +1294,19 @@ function renderWeightedResults(data) {
         {
           label: `Direct Attainment (${data.direct_weight}%)`,
           data: data.combined_results.map(c => c.direct_attainment),
-          backgroundColor: '#3b82f6',
+          backgroundColor: '#10b981',
           borderRadius: 4
         },
         {
           label: `Indirect Attainment (${data.indirect_weight}%)`,
           data: data.combined_results.map(c => c.indirect_attainment),
-          backgroundColor: '#10b981',
+          backgroundColor: '#f59e0b',
           borderRadius: 4
         },
         {
           label: 'Combined Weighted Attainment',
           data: data.combined_results.map(c => c.combined_attainment),
-          backgroundColor: '#1e293b',
+          backgroundColor: '#dc2626',
           borderRadius: 4
         }
       ]
@@ -1019,27 +1345,47 @@ function proceedPage2PdfDownload() {
     }
   }
   closePage2PdfModal();
-  window.location.href = `/download/assessment-pdf?charts=${charts}`;
+  downloadFileWithState(`/download/assessment-pdf?charts=${charts}`, 'CO_Assessment_Report.pdf');
 }
 
 // Auto-restore previous calculations when navigating back to Page 2
 window.addEventListener('DOMContentLoaded', async () => {
   try {
     const res = await fetch('/api/get-full-state');
-    const state = await res.json();
-    if (state.direct && state.direct.co_summaries && state.direct.co_summaries.length > 0) {
-      renderDirectResults(state.direct);
+    let state = await res.json();
+    const stored = (typeof getStoredState === 'function') ? getStoredState() : {};
+
+    let directData = state.direct;
+    if ((!directData || !directData.co_summaries || directData.co_summaries.length === 0) && stored.direct) {
+      directData = stored.direct;
+      if (typeof syncStateToBackend === 'function') {
+        syncStateToBackend(stored);
+      }
+    }
+
+    let indirectData = state.indirect;
+    if ((!indirectData || !indirectData.co_summaries || indirectData.co_summaries.length === 0) && stored.indirect) {
+      indirectData = stored.indirect;
+    }
+
+    let weightedData = state.weighted;
+    if ((!weightedData || !weightedData.combined_results || weightedData.combined_results.length === 0) && stored.weighted) {
+      weightedData = stored.weighted;
+    }
+
+    if (directData && directData.co_summaries && directData.co_summaries.length > 0) {
+      renderDirectResults(directData);
       document.getElementById('directResultsSection').style.display = 'block';
       document.getElementById('btnGoToStep3').style.display = 'inline-flex';
       const btnPdf = document.getElementById('btnPage2PdfTop');
       if (btnPdf) btnPdf.style.display = 'inline-flex';
     }
-    if (state.indirect && state.indirect.co_summaries && state.indirect.co_summaries.length > 0) {
-      renderIndirectResults(state.indirect);
+    if (indirectData && indirectData.co_summaries && indirectData.co_summaries.length > 0) {
+      renderIndirectResults(indirectData);
       document.getElementById('indirectResultsSection').style.display = 'block';
     }
-    if (state.weighted && state.weighted.combined_results && state.weighted.combined_results.length > 0) {
-      renderWeightedResults(state.weighted);
+    if (weightedData && weightedData.combined_results && weightedData.combined_results.length > 0) {
+      renderWeightedResults(weightedData);
       document.getElementById('weightedSection').style.display = 'block';
     }
   } catch (err) {

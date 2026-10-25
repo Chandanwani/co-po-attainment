@@ -287,8 +287,16 @@ def create_word_report(report_data: Dict[str, Any]) -> io.BytesIO:
     h6_run.font.color.rgb = RGBColor(30, 41, 59)
 
     if po_results:
-        table_po = doc.add_table(rows=len(po_results) + 1, cols=7)
-        hdrs = ["Program Outcome", "Mapping Sum", "Avg Map", "Direct PO", "Indirect PO", "Final PO (0-3)", "Attainment Level"]
+        has_indirect = copo.get("has_indirect") or any(p.get("indirect_attainment") is not None and p.get("indirect_attainment") > 0 for p in po_results)
+        cols_count = 7 if has_indirect else 6
+        table_po = doc.add_table(rows=len(po_results) + 1, cols=cols_count)
+        if has_indirect:
+            hdrs = ["Program Outcome", "Mapping Sum", "Avg Map", "Direct PO", "Indirect PO", "Final PO (0-3)", "Attainment Level"]
+            col_widths = [1.1, 0.8, 0.8, 0.9, 0.9, 1.0, 1.3]
+        else:
+            hdrs = ["Program Outcome", "Mapping Sum", "Avg Map", "Direct PO (0-3)", "Final PO (0-3)", "Attainment Level"]
+            col_widths = [1.3, 0.9, 0.9, 1.1, 1.1, 1.5]
+
         for c_idx, h in enumerate(hdrs):
             cell = table_po.rows[0].cells[c_idx]
             set_cell_background(cell, "1E293B")
@@ -309,15 +317,25 @@ def create_word_report(report_data: Dict[str, Any]) -> io.BytesIO:
             ind_disp = str(ind_att) if ind_att is not None else "N/A"
             avg_m = str(p_item.get("mapping_avg", "N/A"))
 
-            vals = [
-                p_item.get("po"),
-                str(p_item.get("mapping_sum")),
-                avg_m,
-                dir_disp,
-                ind_disp,
-                att_disp,
-                p_item.get("level_label")
-            ]
+            if has_indirect:
+                vals = [
+                    p_item.get("po"),
+                    str(p_item.get("mapping_sum")),
+                    avg_m,
+                    dir_disp,
+                    ind_disp,
+                    att_disp,
+                    p_item.get("level_label")
+                ]
+            else:
+                vals = [
+                    p_item.get("po"),
+                    str(p_item.get("mapping_sum")),
+                    avg_m,
+                    dir_disp,
+                    att_disp,
+                    p_item.get("level_label")
+                ]
             for c_idx, val in enumerate(vals):
                 cell = row.cells[c_idx]
                 if r_idx % 2 == 0:
@@ -325,8 +343,8 @@ def create_word_report(report_data: Dict[str, Any]) -> io.BytesIO:
                 p = cell.paragraphs[0]
                 run = p.add_run(str(val))
                 run.font.size = Pt(8.5)
-                p.alignment = WD_ALIGN_PARAGRAPH.CENTER if c_idx != 6 else WD_ALIGN_PARAGRAPH.LEFT
-        style_table(table_po, [1.1, 0.8, 0.8, 0.9, 0.9, 1.0, 1.3])
+                p.alignment = WD_ALIGN_PARAGRAPH.CENTER if c_idx != len(vals) - 1 else WD_ALIGN_PARAGRAPH.LEFT
+        style_table(table_po, col_widths)
 
     out = io.BytesIO()
     doc.save(out)

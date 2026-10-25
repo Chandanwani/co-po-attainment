@@ -623,15 +623,18 @@ def create_pdf_report(report_data: Dict[str, Any], include_charts: bool = True, 
         col_w = min(35, (540 - 70) / max(1, len(po_list)))
         po_results = copo.get("po_results", [])
         po_map = {p.get("po"): p for p in po_results}
+        has_indirect = copo.get("has_indirect") or any(p.get("indirect_attainment") is not None and p.get("indirect_attainment") > 0 for p in po_results)
 
-        # 4 summary rows at bottom of matrix (DY Patil format)
+        # Summary rows at bottom of matrix (DY Patil format)
         if po_results:
             summary_configs = [
                 ("Mapping Avg", "mapping_avg"),
-                ("Direct PO Att.", "direct_attainment"),
-                ("Indirect PO Att.", "indirect_attainment"),
-                ("Final Att.", "attainment")
+                ("Direct PO Att.", "direct_attainment")
             ]
+            if has_indirect:
+                summary_configs.append(("Indirect PO Att.", "indirect_attainment"))
+            summary_configs.append(("Final Att.", "attainment"))
+
             for lbl, k in summary_configs:
                 row_cells = [Paragraph(lbl, bold_cell)]
                 for po in po_list:
@@ -657,31 +660,55 @@ def create_pdf_report(report_data: Dict[str, Any], include_charts: bool = True, 
     # Section 4b: PO & PSO Attainment Table (Include for "all" or "copo")
     if section in ["all", "copo"] and copo.get("po_results"):
         elements.append(Paragraph("4b. Program Outcome (PO &amp; PSO) Attainment Results", h2_style))
-        po_headers = [
-            Paragraph("PO / PSO", header_cell),
-            Paragraph("Mapping Sum", header_cell),
-            Paragraph("Avg Map", header_cell),
-            Paragraph("Direct PO", header_cell),
-            Paragraph("Indirect PO", header_cell),
-            Paragraph("Final PO (0-3)", header_cell),
-            Paragraph("Attainment Level", header_cell),
-        ]
+        has_indirect = copo.get("has_indirect") or any(p.get("indirect_attainment") is not None and p.get("indirect_attainment") > 0 for p in copo.get("po_results", []))
+        if has_indirect:
+            po_headers = [
+                Paragraph("PO / PSO", header_cell),
+                Paragraph("Mapping Sum", header_cell),
+                Paragraph("Avg Map", header_cell),
+                Paragraph("Direct PO", header_cell),
+                Paragraph("Indirect PO", header_cell),
+                Paragraph("Final PO (0-3)", header_cell),
+                Paragraph("Attainment Level", header_cell),
+            ]
+            col_widths_po = [65, 65, 65, 75, 75, 75, 120]
+        else:
+            po_headers = [
+                Paragraph("PO / PSO", header_cell),
+                Paragraph("Mapping Sum", header_cell),
+                Paragraph("Avg Map", header_cell),
+                Paragraph("Direct PO (0-3)", header_cell),
+                Paragraph("Final PO (0-3)", header_cell),
+                Paragraph("Attainment Level", header_cell),
+            ]
+            col_widths_po = [75, 75, 75, 95, 95, 125]
+
         po_rows = [po_headers]
         for p in copo.get("po_results", []):
             att_3 = str(p.get('attainment', '-')) if p.get('attainment') is not None else "N/A"
             dir_3 = str(p.get('direct_attainment', '-')) if p.get('direct_attainment') is not None else "N/A"
             ind_3 = str(p.get('indirect_attainment', '-')) if p.get('indirect_attainment') is not None else "N/A"
             avg_m = str(p.get('mapping_avg', '-')) if p.get('mapping_avg') is not None else "N/A"
-            po_rows.append([
-                Paragraph(str(p.get('po')), bold_cell),
-                Paragraph(str(p.get('mapping_sum')), normal_cell),
-                Paragraph(avg_m, bold_cell),
-                Paragraph(dir_3, normal_cell),
-                Paragraph(ind_3, normal_cell),
-                Paragraph(att_3, bold_cell),
-                Paragraph(str(p.get('level_label')), bold_cell),
-            ])
-        po_table = Table(po_rows, colWidths=[65, 65, 65, 75, 75, 75, 120])
+            if has_indirect:
+                po_rows.append([
+                    Paragraph(str(p.get('po')), bold_cell),
+                    Paragraph(str(p.get('mapping_sum')), normal_cell),
+                    Paragraph(avg_m, bold_cell),
+                    Paragraph(dir_3, normal_cell),
+                    Paragraph(ind_3, normal_cell),
+                    Paragraph(att_3, bold_cell),
+                    Paragraph(str(p.get('level_label')), bold_cell),
+                ])
+            else:
+                po_rows.append([
+                    Paragraph(str(p.get('po')), bold_cell),
+                    Paragraph(str(p.get('mapping_sum')), normal_cell),
+                    Paragraph(avg_m, bold_cell),
+                    Paragraph(dir_3, normal_cell),
+                    Paragraph(att_3, bold_cell),
+                    Paragraph(str(p.get('level_label')), bold_cell),
+                ])
+        po_table = Table(po_rows, colWidths=col_widths_po)
         po_table.setStyle(TableStyle([
             ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#2563EB')),
             ('GRID', (0, 0), (-1, -1), 0.3, colors.HexColor('#CBD5E1')),
@@ -714,9 +741,11 @@ def create_pdf_report(report_data: Dict[str, Any], include_charts: bool = True, 
             c5 = create_po_direct_barchart_drawing(copo)
             if c5:
                 charts_to_show.append(("<b>Graph 4: CO-PO-PSO Direct Attainment Profile (Blue: Mapping Level | Red: Direct PO Attainment)</b>", c5))
-            c6 = create_po_indirect_barchart_drawing(copo)
-            if c6:
-                charts_to_show.append(("<b>Graph 5: CO-PO-PSO Indirect Attainment Profile (Blue: Mapping Level | Red: Indirect PO Attainment)</b>", c6))
+            has_indirect = copo.get("has_indirect") or any(p.get("indirect_attainment") is not None and p.get("indirect_attainment") > 0 for p in copo.get("po_results", []))
+            if has_indirect:
+                c6 = create_po_indirect_barchart_drawing(copo)
+                if c6:
+                    charts_to_show.append(("<b>Graph 5: CO-PO-PSO Indirect Attainment Profile (Blue: Mapping Level | Red: Indirect PO Attainment)</b>", c6))
 
         if charts_to_show:
             elements.append(PageBreak())

@@ -975,27 +975,44 @@ function hideIndirectError() {
 
 function renderDetectedCOs(cos) {
   const container = document.getElementById('detectedCOsList');
+  if (!container) return;
   container.innerHTML = '';
-  cos.forEach(co => {
+  cos.forEach((co, idx) => {
     const badge = document.createElement('span');
     badge.className = 'badge';
     badge.style.background = '#e0f2fe';
     badge.style.color = '#0369a1';
-    badge.textContent = co;
+    badge.style.display = 'inline-flex';
+    badge.style.alignItems = 'center';
+    badge.style.gap = '6px';
+    badge.innerHTML = `<span>${co}</span><button type="button" onclick="removeIndirectColumn(${idx})" title="Remove ${co} column" style="border:none;background:none;color:#dc2626;cursor:pointer;font-weight:bold;padding:0;font-size:13px;line-height:1;">&times;</button>`;
     container.appendChild(badge);
   });
 }
 
 function renderIndirectTable(ratings, cos) {
   const table = document.getElementById('indirectRatingsTable');
+  if (!table) return;
   const thead = table.querySelector('thead');
   const tbody = table.querySelector('tbody');
 
-  let thHtml = '<tr><th style="width: 50px;">#</th>';
-  cos.forEach(co => {
-    thHtml += `<th>${co}</th>`;
+  let thHtml = '<tr><th style="width: 50px;" class="text-center">#</th>';
+  cos.forEach((co, cIdx) => {
+    thHtml += `
+      <th class="text-center" style="min-width: 80px; padding: 4px 6px;">
+        <div style="display: flex; flex-direction: column; align-items: center; gap: 3px;">
+          <input type="text" class="cell-input text-center bold indirect-co-header" 
+                 data-co-idx="${cIdx}" value="${co}" 
+                 style="font-size: 11.5px; width: 66px; padding: 2px 4px; border: 1px solid var(--border-color); background: #ffffff;"
+                 title="Click to rename this CO column"
+                 onchange="updateIndirectColumnName(${cIdx}, this.value)">
+          <button type="button" class="btn-col-cross" onclick="removeIndirectColumn(${cIdx})" title="Remove ${co} column" 
+                  style="border: none; background: #fee2e2; color: #dc2626; border-radius: 50%; width: 18px; height: 18px; font-size: 13px; font-weight: bold; cursor: pointer; display: flex; align-items: center; justify-content: center; line-height: 1; padding: 0;">&times;</button>
+        </div>
+      </th>
+    `;
   });
-  thHtml += '</tr>';
+  thHtml += '<th style="width: 60px;" class="text-center">Action</th></tr>';
   thead.innerHTML = thHtml;
 
   tbody.innerHTML = '';
@@ -1004,11 +1021,101 @@ function renderIndirectTable(ratings, cos) {
     let trHtml = `<td class="text-center bold">${rIdx + 1}</td>`;
     cos.forEach(co => {
       const val = row[co] ?? '';
-      trHtml += `<td><input type="number" step="0.5" class="cell-input" data-co="${co}" value="${val}"></td>`;
+      trHtml += `<td><input type="number" step="0.5" class="cell-input" data-co="${co}" value="${val}" style="width: 100%; text-align: center;"></td>`;
     });
+    trHtml += `<td class="text-center"><button type="button" class="btn btn-outline btn-sm" style="color:#ef4444;padding:2px 6px;" onclick="removeIndirectRow(this)" title="Delete row">&times;</button></td>`;
     tr.innerHTML = trHtml;
     tbody.appendChild(tr);
   });
+}
+
+function updateIndirectColumnName(cIdx, newName) {
+  if (!currentIndirectRaw) return;
+  const clean = newName.trim().toUpperCase();
+  if (!clean) return;
+  const cos = currentIndirectRaw.detected_cos || [];
+  if (cIdx < 0 || cIdx >= cos.length) return;
+  const oldName = cos[cIdx];
+  if (oldName === clean) return;
+
+  cos[cIdx] = clean;
+  (currentIndirectRaw.ratings_data || []).forEach(row => {
+    if (row[oldName] !== undefined) {
+      row[clean] = row[oldName];
+      delete row[oldName];
+    }
+  });
+
+  renderDetectedCOs(cos);
+  renderIndirectTable(currentIndirectRaw.ratings_data, cos);
+  calculateIndirectAttainment();
+}
+
+function removeIndirectColumn(cIdx) {
+  if (!currentIndirectRaw) return;
+  const cos = currentIndirectRaw.detected_cos || [];
+  if (cIdx < 0 || cIdx >= cos.length) return;
+  const colName = cos[cIdx];
+  if (!confirm(`Are you sure you want to remove column ${colName}?`)) return;
+
+  cos.splice(cIdx, 1);
+  (currentIndirectRaw.ratings_data || []).forEach(row => {
+    delete row[colName];
+  });
+
+  renderDetectedCOs(cos);
+  renderIndirectTable(currentIndirectRaw.ratings_data, cos);
+  calculateIndirectAttainment();
+}
+
+function addIndirectColumn() {
+  if (!currentIndirectRaw) {
+    currentIndirectRaw = { detected_cos: [], ratings_data: [] };
+  }
+  const cos = currentIndirectRaw.detected_cos || [];
+  const nextNum = cos.length + 1;
+  const name = prompt('Enter Course Outcome column name (e.g. CO' + nextNum + '):', 'CO' + nextNum);
+  if (!name || !name.trim()) return;
+  const clean = name.trim().toUpperCase();
+  if (cos.includes(clean)) {
+    alert('Column already exists!');
+    return;
+  }
+  cos.push(clean);
+  (currentIndirectRaw.ratings_data || []).forEach(row => {
+    if (row[clean] === undefined) row[clean] = '';
+  });
+  renderDetectedCOs(cos);
+  renderIndirectTable(currentIndirectRaw.ratings_data, cos);
+}
+
+function addIndirectRow() {
+  const table = document.getElementById('indirectRatingsTable');
+  if (!table) return;
+  const tbody = table.querySelector('tbody');
+  const cos = currentIndirectRaw?.detected_cos || ['CO1', 'CO2', 'CO3', 'CO4', 'CO5'];
+  const rIdx = tbody.querySelectorAll('tr').length;
+
+  const tr = document.createElement('tr');
+  let trHtml = `<td class="text-center bold">${rIdx + 1}</td>`;
+  cos.forEach(co => {
+    trHtml += `<td><input type="number" step="0.5" class="cell-input" data-co="${co}" value="" style="width: 100%; text-align: center;"></td>`;
+  });
+  trHtml += `<td class="text-center"><button type="button" class="btn btn-outline btn-sm" style="color:#ef4444;padding:2px 6px;" onclick="removeIndirectRow(this)" title="Delete row">&times;</button></td>`;
+  tr.innerHTML = trHtml;
+  tbody.appendChild(tr);
+}
+
+function removeIndirectRow(btn) {
+  const tr = btn.closest('tr');
+  if (tr) {
+    tr.remove();
+    const rows = document.querySelectorAll('#indirectRatingsTable tbody tr');
+    rows.forEach((r, idx) => {
+      const firstCol = r.querySelector('td');
+      if (firstCol) firstCol.textContent = idx + 1;
+    });
+  }
 }
 
 function collectIndirectDataFromUI() {

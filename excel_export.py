@@ -390,14 +390,18 @@ def create_complete_excel_report(report_data: Dict[str, Any]) -> io.BytesIO:
                 cell.font = BOLD_FONT
         r_idx += 1
 
-    # Reference DY Patil format: 4 summary rows under matrix
+    # Reference DY Patil format: summary rows under matrix
     po_map = {p.get("po"): p for p in po_results}
+    has_indirect = copo.get("has_indirect") or any(p.get("indirect_attainment") is not None and p.get("indirect_attainment") > 0 for p in po_results)
+
     summary_rows_def = [
         ("CO-PO-PSO Mapping (Average Level)", "mapping_avg", PatternFill(start_color="F1F5F9", end_color="F1F5F9", fill_type="solid")),
-        ("CO-PO-PSO Direct Attainment", "direct_attainment", PatternFill(start_color="DCFCE7", end_color="DCFCE7", fill_type="solid")),
-        ("CO-PO-PSO Indirect Attainment", "indirect_attainment", PatternFill(start_color="FEF9C3", end_color="FEF9C3", fill_type="solid")),
-        ("Final / Combined Attainment", "attainment", PatternFill(start_color="DBEAFE", end_color="DBEAFE", fill_type="solid"))
+        ("CO-PO-PSO Direct Attainment", "direct_attainment", PatternFill(start_color="DCFCE7", end_color="DCFCE7", fill_type="solid"))
     ]
+    if has_indirect:
+        summary_rows_def.append(("CO-PO-PSO Indirect Attainment", "indirect_attainment", PatternFill(start_color="FEF9C3", end_color="FEF9C3", fill_type="solid")))
+    summary_rows_def.append(("Final / Combined Attainment", "attainment", PatternFill(start_color="DBEAFE", end_color="DBEAFE", fill_type="solid")))
+
     summary_start_row = r_idx
 
     for label, field_key, fill_color in summary_rows_def:
@@ -447,21 +451,22 @@ def create_complete_excel_report(report_data: Dict[str, Any]) -> io.BytesIO:
             chart_dir.series[1].graphicalProperties.solidFill = "C0504D"
         ws_map.add_chart(chart_dir, f"A{r_idx + 2}")
 
-        # 2. Indirect PO Attainment BarChart (Mapping vs Indirect)
-        chart_ind = BarChart()
-        chart_ind.type = "col"
-        chart_ind.title = "CO-PO-PSO Indirect Attainment Profile"
-        chart_ind.y_axis.title = "Attainment Level (0-3)"
-        chart_ind.x_axis.title = "Program Outcomes"
-        chart_ind.width = 17
-        chart_ind.height = 9.5
-        chart_ind.add_data(Reference(ws_map, min_col=1, min_row=map_row, max_col=1 + len(po_list), max_row=map_row), titles_from_data=True, from_rows=True)
-        chart_ind.add_data(Reference(ws_map, min_col=1, min_row=ind_row, max_col=1 + len(po_list), max_row=ind_row), titles_from_data=True, from_rows=True)
-        chart_ind.set_categories(cats)
-        if len(chart_ind.series) >= 2:
-            chart_ind.series[0].graphicalProperties.solidFill = "4F81BD"
-            chart_ind.series[1].graphicalProperties.solidFill = "C0504D"
-        ws_map.add_chart(chart_ind, f"I{r_idx + 2}")
+        # 2. Indirect PO Attainment BarChart (Only when indirect assessment was uploaded/selected)
+        if has_indirect:
+            chart_ind = BarChart()
+            chart_ind.type = "col"
+            chart_ind.title = "CO-PO-PSO Indirect Attainment Profile"
+            chart_ind.y_axis.title = "Attainment Level (0-3)"
+            chart_ind.x_axis.title = "Program Outcomes"
+            chart_ind.width = 17
+            chart_ind.height = 9.5
+            chart_ind.add_data(Reference(ws_map, min_col=1, min_row=map_row, max_col=1 + len(po_list), max_row=map_row), titles_from_data=True, from_rows=True)
+            chart_ind.add_data(Reference(ws_map, min_col=1, min_row=ind_row, max_col=1 + len(po_list), max_row=ind_row), titles_from_data=True, from_rows=True)
+            chart_ind.set_categories(cats)
+            if len(chart_ind.series) >= 2:
+                chart_ind.series[0].graphicalProperties.solidFill = "4F81BD"
+                chart_ind.series[1].graphicalProperties.solidFill = "C0504D"
+            ws_map.add_chart(chart_ind, f"I{r_idx + 2}")
     except Exception as e:
         pass
 
@@ -476,11 +481,17 @@ def create_complete_excel_report(report_data: Dict[str, Any]) -> io.BytesIO:
     ws_po["A1"] = "Program Outcome (PO & PSO) Attainment Results"
     ws_po["A1"].font = SECTION_FONT
 
-    headers_po = [
-        "Program Outcome", "Mapping Level Sum", "Average Mapping Level",
-        "Direct PO Attainment", "Indirect PO Attainment",
-        "PO Attainment (0-3)", "Attainment Level"
-    ]
+    if has_indirect:
+        headers_po = [
+            "Program Outcome", "Mapping Level Sum", "Average Mapping Level",
+            "Direct PO Attainment", "Indirect PO Attainment",
+            "PO Attainment (0-3)", "Attainment Level"
+        ]
+    else:
+        headers_po = [
+            "Program Outcome", "Mapping Level Sum", "Average Mapping Level",
+            "Direct PO Attainment", "PO Attainment (0-3)", "Attainment Level"
+        ]
     for c_idx, h in enumerate(headers_po, start=1):
         ws_po.cell(row=3, column=c_idx, value=h)
     style_header_row(ws_po, 3, len(headers_po))
@@ -495,16 +506,22 @@ def create_complete_excel_report(report_data: Dict[str, Any]) -> io.BytesIO:
         ind_display = ind_att if ind_att is not None else "N/A"
         avg_map = p.get("mapping_avg", "N/A")
 
-        row_vals = [
-            p.get("po"), p.get("mapping_sum"), avg_map,
-            dir_display, ind_display,
-            att_display, p.get("level_label")
-        ]
+        if has_indirect:
+            row_vals = [
+                p.get("po"), p.get("mapping_sum"), avg_map,
+                dir_display, ind_display,
+                att_display, p.get("level_label")
+            ]
+        else:
+            row_vals = [
+                p.get("po"), p.get("mapping_sum"), avg_map,
+                dir_display, att_display, p.get("level_label")
+            ]
         for c_idx, val in enumerate(row_vals, start=1):
             cell = ws_po.cell(row=r_idx, column=c_idx, value=val)
             cell.font = REGULAR_FONT
             cell.border = CELL_BORDER
-            cell.alignment = Alignment(horizontal="center" if c_idx != 7 else "left")
+            cell.alignment = Alignment(horizontal="center" if c_idx != len(row_vals) else "left")
             if r_idx % 2 == 1:
                 cell.fill = ZEBRA_FILL
         r_idx += 1

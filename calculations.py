@@ -674,7 +674,7 @@ def compute_po_attainment(
             po_att_0_1 = None
             level_label = "Not Mapped"
             direct_po_att = 0.0
-            indirect_po_att = 0.0
+            indirect_po_att = 0.0 if indirect_co_attainments is not None else None
 
         po_results.append({
             'po': po,
@@ -700,7 +700,8 @@ def compute_po_attainment(
         'mapping_averages': mapping_averages,
         'overall_po_attainment': overall_po_att,
         'overall_po_attainment_0_1': overall_po_0_1,
-        'overall_po_level': get_attainment_level_label(overall_po_att) if valid_po_atts else "Not Mapped"
+        'overall_po_level': get_attainment_level_label(overall_po_att) if valid_po_atts else "Not Mapped",
+        'has_indirect': bool(indirect_co_attainments)
     }
 
 

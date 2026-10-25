@@ -213,12 +213,16 @@ function renderReport(state) {
   const poResMap = {};
   (copo.po_results || []).forEach(p => { poResMap[p.po] = p; });
 
+  const hasIndirect = Boolean(copo.has_indirect || (indirect.co_summaries && indirect.co_summaries.length > 0) || (copo.po_results && copo.po_results.some(p => p.indirect_attainment !== null && p.indirect_attainment !== undefined && p.indirect_attainment > 0)));
+
   const summaryConfigs = [
     { label: 'CO-PO-PSO Mapping (Average)', key: 'mapping_avg', bg: '#f8fafc', color: '#1e293b' },
-    { label: 'Direct PO Attainment', key: 'direct_attainment', bg: '#f0fdf4', color: '#166534' },
-    { label: 'Indirect PO Attainment', key: 'indirect_attainment', bg: '#fefce8', color: '#854d0e' },
-    { label: 'Final Combined Attainment', key: 'attainment', bg: '#eff6ff', color: '#1d4ed8' }
+    { label: 'Direct PO Attainment', key: 'direct_attainment', bg: '#f0fdf4', color: '#166534' }
   ];
+  if (hasIndirect) {
+    summaryConfigs.push({ label: 'Indirect PO Attainment', key: 'indirect_attainment', bg: '#fefce8', color: '#854d0e' });
+  }
+  summaryConfigs.push({ label: 'Final Combined Attainment', key: 'attainment', bg: '#eff6ff', color: '#1d4ed8' });
 
   summaryConfigs.forEach(cfg => {
     const tr = document.createElement('tr');
@@ -237,6 +241,22 @@ function renderReport(state) {
   });
 
   // 4. PO Attainment Table
+  const theadPO = document.getElementById('repPOTable').querySelector('thead');
+  if (theadPO) {
+    theadPO.innerHTML = `
+      <tr>
+        <th>Program Outcome (PO/PSO)</th>
+        <th>Mapping Level Sum</th>
+        <th>Average Mapping</th>
+        <th>Direct PO Attainment</th>
+        ${hasIndirect ? '<th>Indirect PO Attainment</th>' : ''}
+        <th>Final PO Attainment (0-3)</th>
+        <th>Attainment Level</th>
+        <th>Contributing Mapped COs</th>
+      </tr>
+    `;
+  }
+
   const tbodyPO = document.getElementById('repPOTable').querySelector('tbody');
   tbodyPO.innerHTML = '';
   if (copo.overall_po_attainment !== undefined) {
@@ -255,7 +275,7 @@ function renderReport(state) {
       <td class="text-center">${p.mapping_sum}</td>
       <td class="text-center bold">${avgMapDisp}</td>
       <td class="text-center" style="color:#166534; font-weight:600;">${directDisp}</td>
-      <td class="text-center" style="color:#854d0e; font-weight:600;">${indirectDisp}</td>
+      ${hasIndirect ? `<td class="text-center" style="color:#854d0e; font-weight:600;">${indirectDisp}</td>` : ''}
       <td class="text-center bold" style="color:var(--accent); font-size:14px;">${attDisp}</td>
       <td class="text-center">${getBadgeHtml(p.level_label)}</td>
       <td><span style="font-size:12px; color:var(--text-muted);">${contribStr}</span></td>
@@ -264,7 +284,7 @@ function renderReport(state) {
   });
 
   // 5. PO Charts
-  renderPOCharts(copo.po_results || []);
+  renderPOCharts(copo.po_results || [], hasIndirect);
 
   // 6. Assessment Summaries Table (if present)
   const repAssEl = document.getElementById('repAssessmentTable');
@@ -421,11 +441,22 @@ function renderCOCharts(weighted, direct) {
   });
 }
 
-function renderPOCharts(po_results) {
+function renderPOCharts(po_results, hasIndirect) {
   const labels = po_results.map(p => p.po);
   const mappingVals = po_results.map(p => (p.mapping_avg !== undefined && p.mapping_avg !== null) ? p.mapping_avg : 0);
   const directVals = po_results.map(p => (p.direct_attainment !== undefined && p.direct_attainment !== null) ? p.direct_attainment : 0);
   const indirectVals = po_results.map(p => (p.indirect_attainment !== undefined && p.indirect_attainment !== null) ? p.indirect_attainment : 0);
+
+  const ctxIndirect = document.getElementById('repChartPOIndirectBar');
+  const indBox = ctxIndirect ? ctxIndirect.closest('.chart-box') : null;
+  const gridContainer = indBox ? indBox.parentElement : null;
+
+  if (indBox) {
+    indBox.style.display = hasIndirect ? 'block' : 'none';
+  }
+  if (gridContainer && gridContainer.classList.contains('grid-2')) {
+    gridContainer.style.gridTemplateColumns = hasIndirect ? '' : '1fr';
+  }
 
   // 1. Direct Attainment vs Mapping Bar Chart (Excel Style: Blue #4F81BD vs Red #C0504D)
   const ctxDirect = document.getElementById('repChartPODirectBar');
@@ -468,9 +499,8 @@ function renderPOCharts(po_results) {
     });
   }
 
-  // 2. Indirect Attainment vs Mapping Bar Chart (Excel Style: Blue #4F81BD vs Red #C0504D)
-  const ctxIndirect = document.getElementById('repChartPOIndirectBar');
-  if (ctxIndirect) {
+  // 2. Indirect Attainment vs Mapping Bar Chart (Only when indirect assessment was selected/uploaded)
+  if (ctxIndirect && hasIndirect) {
     if (repCharts['poIndirectBar']) repCharts['poIndirectBar'].destroy();
     repCharts['poIndirectBar'] = new Chart(ctxIndirect, {
       type: 'bar',
@@ -507,6 +537,8 @@ function renderPOCharts(po_results) {
         }
       }
     });
+  } else if (repCharts['poIndirectBar']) {
+    repCharts['poIndirectBar'].destroy();
   }
 }
 

@@ -752,6 +752,18 @@ def test_reference_co_po_direct_indirect_and_reset():
     assert po_dict['PO3']['direct_attainment'] == 0.0
     assert po_dict['PO3']['attainment'] is None
 
+    # Test without indirect assessment (has_indirect must be False, indirect_attainment is None)
+    res_no_ind = compute_po_attainment(
+        mapping_matrix=matrix,
+        co_attainments=co_atts,
+        po_list=['PO1', 'PO2', 'PO3'],
+        co_list=['CO1', 'CO2'],
+        direct_co_attainments=direct_atts,
+        indirect_co_attainments=None
+    )
+    assert res_no_ind['has_indirect'] is False
+    assert res_no_ind['po_results'][0]['indirect_attainment'] is None
+
     # Test default session reset on visiting / or /teacher
     client = app.test_client()
     with client.session_transaction() as sess:
