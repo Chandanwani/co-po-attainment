@@ -15,7 +15,7 @@
           Faculty: <strong>{{ teacher.faculty_name }}</strong> &bull;
           Class: {{ teacher.class_name or 'N/A' }} ({{ teacher.division or 'A' }}) &bull;
           Academic Year: {{ teacher.academic_year or 'N/A' }} &bull;
-          <span class="badge" style="background:#e0e7ff; color:#3730a3; font-weight:700;">🧪 Practical Course{% if teacher.batch %} (Batch: {{ teacher.batch }}){% endif %}</span>
+          <span class="badge" style="background:#e0e7ff; color:#3730a3; font-weight:700;">🧪 Practical Course{% if teacher.batch and teacher.batch not in ['All Divisions'] %} ({% if teacher.batch == 'Full Division' %}Full Division{% else %}Batch: {{ teacher.batch }}{% endif %}){% endif %}</span>
         </p>
       </div>
       <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">

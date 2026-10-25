@@ -96,9 +96,9 @@
       <div class="stat-card" style="text-align: left;">
         <div class="stat-label">Class &amp; Division</div>
         <div style="font-size: 16px; font-weight: 700; color: var(--primary); margin-top: 4px;">
-          {{ teacher.class_name or 'N/A' }} - Div {{ teacher.division or 'A' }}
+          {{ teacher.class_name or 'N/A' }} - {% if teacher.division in ['All Divisions', 'ALL DIVISIONS'] %}{{ teacher.division }}{% else %}Div {{ teacher.division or 'A' }}{% endif %}
           {% if teacher.course_type == 'practical' %}
-            <span class="badge" style="background:#e0e7ff; color:#3730a3; margin-left: 6px; font-size: 11px;">🧪 Practical{% if teacher.batch %} (Batch: {{ teacher.batch }}){% endif %}</span>
+            <span class="badge" style="background:#e0e7ff; color:#3730a3; margin-left: 6px; font-size: 11px;">🧪 Practical{% if teacher.batch and teacher.batch not in ['All Divisions'] %} ({% if teacher.batch == 'Full Division' %}Full Division{% else %}Batch: {{ teacher.batch }}{% endif %}){% endif %}</span>
           {% else %}
             <span class="badge" style="background:#f1f5f9; color:#475569; margin-left: 6px; font-size: 11px;">📖 Theory</span>
           {% endif %}

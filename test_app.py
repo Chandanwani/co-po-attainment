@@ -758,9 +758,24 @@ def test_reference_co_po_direct_indirect_and_reset():
         sess['teacher'] = {'faculty_name': 'Existing Faculty'}
     res = client.get('/teacher')
     assert res.status_code == 200
+    assert b"All Divisions" in res.data
     # Session must be fresh and clean
     with client.session_transaction() as sess:
         assert sess.get('teacher', {}).get('faculty_name') != 'Existing Faculty'
+
+    # Test saving teacher with All Divisions
+    save_res = client.post('/api/save-teacher', json={
+        'faculty_name': 'Dr. Sharma',
+        'subject': 'Laboratory Practice (CS301)',
+        'course_type': 'practical',
+        'class_name': 'TY',
+        'division': 'All Divisions',
+        'batch': 'All Divisions',
+        'semester': 'Semester I',
+        'academic_year': '2024-25'
+    })
+    assert save_res.status_code == 200
+    assert save_res.get_json()['success'] is True
 
 
 if __name__ == '__main__':

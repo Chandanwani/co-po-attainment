@@ -65,10 +65,11 @@
           <label class="form-label" for="division">Division</label>
           <select id="division" name="division" class="form-control" onchange="updateBatchOptions()">
             <option value="">-- Select Division --</option>
+            <option value="All Divisions" {% if teacher.division in ['All Divisions', 'ALL DIVISIONS', 'All'] %}selected{% endif %}>All Divisions</option>
             <option value="A" {% if teacher.division == 'A' %}selected{% endif %}>A</option>
             <option value="B" {% if teacher.division == 'B' %}selected{% endif %}>B</option>
             <option value="C" {% if teacher.division == 'C' %}selected{% endif %}>C</option>
-            {% if teacher.division and teacher.division not in ['A', 'B', 'C'] %}
+            {% if teacher.division and teacher.division not in ['A', 'B', 'C', 'All Divisions', 'ALL DIVISIONS', 'All'] %}
             <option value="{{ teacher.division }}" selected>{{ teacher.division }}</option>
             {% endif %}
           </select>
@@ -128,8 +129,8 @@
         </div>
       </div>
 
-      <!-- Laboratory Batch (Visible ONLY when Practical is selected) -->
-      <div class="form-group mb-16" id="batchGroup" style="display: {% if teacher.course_type == 'practical' %}block{% else %}none{% endif %}; background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 12px 14px;">
+      <!-- Laboratory Batch (Visible ONLY when Practical is selected AND NOT All Divisions) -->
+      <div class="form-group mb-16" id="batchGroup" style="display: {% if teacher.course_type == 'practical' and teacher.division not in ['All Divisions', 'ALL DIVISIONS', 'All'] %}block{% else %}none{% endif %}; background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 12px 14px;">
         <label class="form-label" for="batch" style="color: #166534; font-weight: 700;">
           Laboratory Batch <span class="required">*</span>
         </label>
@@ -160,18 +161,35 @@
 const urlParams = new URLSearchParams(window.location.search);
 
 function updateBatchOptions(preferredBatch) {
+  const isPrac = document.getElementById('course_type_practical') && document.getElementById('course_type_practical').checked;
   const divSelect = document.getElementById('division');
-  const divVal = divSelect ? divSelect.value.trim().toUpperCase() : '';
-  const prefix = divVal || 'A';
+  const divVal = divSelect ? divSelect.value.trim() : '';
+  const isAllDivisions = divVal.toUpperCase() === 'ALL DIVISIONS' || divVal.toUpperCase() === 'ALL';
+  const batchGroup = document.getElementById('batchGroup');
+
+  // When All Divisions is selected, no need to ask about batch for practical
+  if (batchGroup) {
+    batchGroup.style.display = (isPrac && !isAllDivisions) ? 'block' : 'none';
+  }
+
   const batchSelect = document.getElementById('batch');
   if (!batchSelect) return;
+
+  if (isAllDivisions) {
+    batchSelect.innerHTML = '<option value="All Divisions">All Divisions</option>';
+    batchSelect.value = 'All Divisions';
+    return;
+  }
+
+  const prefix = divVal || 'A';
   const currentVal = preferredBatch || batchSelect.value;
 
   batchSelect.innerHTML = '';
   
+  // Changed to 'Full Division' as requested
   const allOpt = document.createElement('option');
-  allOpt.value = 'All Batches';
-  allOpt.textContent = 'All Batches (Combined Class / Full Division)';
+  allOpt.value = 'Full Division';
+  allOpt.textContent = 'Full Division';
   batchSelect.appendChild(allOpt);
 
   [1, 2, 3, 4].forEach(num => {
@@ -184,6 +202,8 @@ function updateBatchOptions(preferredBatch) {
 
   if (currentVal && Array.from(batchSelect.options).some(o => o.value === currentVal)) {
     batchSelect.value = currentVal;
+  } else if (currentVal && (currentVal === 'All Batches' || currentVal.includes('Full Division'))) {
+    batchSelect.value = 'Full Division';
   } else if (currentVal) {
     const match = currentVal.match(/\d+/);
     if (match) {
@@ -197,11 +217,15 @@ function updateBatchOptions(preferredBatch) {
 
 function onCourseTypeChange() {
   const isPrac = document.getElementById('course_type_practical') && document.getElementById('course_type_practical').checked;
+  const divSelect = document.getElementById('division');
+  const divVal = divSelect ? divSelect.value.trim() : '';
+  const isAllDivisions = divVal.toUpperCase() === 'ALL DIVISIONS' || divVal.toUpperCase() === 'ALL';
   const batchGroup = document.getElementById('batchGroup');
   const lblTheory = document.getElementById('lblTheory');
   const lblPractical = document.getElementById('lblPractical');
+
   if (isPrac) {
-    if (batchGroup) batchGroup.style.display = 'block';
+    if (batchGroup) batchGroup.style.display = isAllDivisions ? 'none' : 'block';
     updateBatchOptions();
     if (lblPractical) {
       lblPractical.style.borderColor = 'var(--primary)';
@@ -267,7 +291,9 @@ async function handleTeacherSubmit(e) {
   }
 
   const isPrac = document.getElementById('course_type_practical') && document.getElementById('course_type_practical').checked;
-  const batchVal = isPrac ? (document.getElementById('batch') ? document.getElementById('batch').value : 'All Batches') : '';
+  const divVal = document.getElementById('division').value.trim();
+  const isAllDiv = divVal.toUpperCase() === 'ALL DIVISIONS' || divVal.toUpperCase() === 'ALL';
+  const batchVal = isPrac ? (isAllDiv ? 'All Divisions' : (document.getElementById('batch') ? document.getElementById('batch').value : 'Full Division')) : '';
 
   const payload = {
     faculty_name: faculty_name,
