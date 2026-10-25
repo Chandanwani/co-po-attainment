@@ -911,35 +911,44 @@ def api_upload_copo():
 def api_compute_copo():
     """Computes PO & PSO attainment from the mapping matrix."""
     sid = get_session_id()
-    data = request.get_json(force=True)
+    data = request.get_json(force=True, silent=True) or {}
     
     matrix = data.get('matrix', {})
     po_list = data.get('po_list')
     co_list = data.get('co_list')
 
-    # Get combined CO attainments
-    weighted_data = TEMP_DATA_STORE[sid].get('weighted_computed')
-    direct_data = TEMP_DATA_STORE[sid].get('direct_computed')
-    indirect_data = TEMP_DATA_STORE[sid].get('indirect_computed')
+    # Get combined CO attainments from payload or server store
+    weighted_data = data.get('weighted') or data.get('weighted_computed') or TEMP_DATA_STORE[sid].get('weighted_computed')
+    direct_data = data.get('direct') or data.get('direct_computed') or TEMP_DATA_STORE[sid].get('direct_computed')
+    indirect_data = data.get('indirect') or data.get('indirect_computed') or TEMP_DATA_STORE[sid].get('indirect_computed')
+
+    if direct_data and not TEMP_DATA_STORE[sid].get('direct_computed'):
+        TEMP_DATA_STORE[sid]['direct_computed'] = direct_data
+    if indirect_data and not TEMP_DATA_STORE[sid].get('indirect_computed'):
+        TEMP_DATA_STORE[sid]['indirect_computed'] = indirect_data
+    if weighted_data and not TEMP_DATA_STORE[sid].get('weighted_computed'):
+        TEMP_DATA_STORE[sid]['weighted_computed'] = weighted_data
 
     co_attainments = {}
     direct_co_atts = {}
     indirect_co_atts = {}
 
-    if direct_data and direct_data.get('co_summaries'):
-        for item in direct_data['co_summaries']:
+    if direct_data:
+        co_sums = direct_data.get('co_summaries') or direct_data.get('data', {}).get('co_summaries') or []
+        for item in co_sums:
             direct_co_atts[item['co']] = item.get('attainment', 0.0)
 
-    if indirect_data and indirect_data.get('co_summaries'):
-        for item in indirect_data['co_summaries']:
+    if indirect_data:
+        co_sums = indirect_data.get('co_summaries') or indirect_data.get('data', {}).get('co_summaries') or []
+        for item in co_sums:
             indirect_co_atts[item['co']] = item.get('attainment', 0.0)
 
-    if weighted_data and weighted_data.get('combined_results'):
-        for item in weighted_data['combined_results']:
+    if weighted_data:
+        comb_results = weighted_data.get('combined_results') or weighted_data.get('data', {}).get('combined_results') or []
+        for item in comb_results:
             co_attainments[item['co']] = item.get('combined_attainment', item.get('attainment', 0.0))
-    elif direct_data and direct_data.get('co_summaries'):
-        for item in direct_data['co_summaries']:
-            co_attainments[item['co']] = item.get('attainment', 0.0)
+    elif direct_co_atts:
+        co_attainments = dict(direct_co_atts)
     else:
         # Default fallback
         for co in matrix.keys():
@@ -961,8 +970,7 @@ def api_compute_copo():
         'po_results': result['po_results'],
         'mapping_averages': result.get('mapping_averages', {}),
         'overall_po_attainment': result['overall_po_attainment'],
-        'overall_po_level': result['overall_po_level'],
-        'has_indirect': bool(indirect_co_atts)
+        'overall_po_level': result['overall_po_level']
     }
 
     return jsonify({'success': True, 'data': TEMP_DATA_STORE[sid]['copo_computed']})

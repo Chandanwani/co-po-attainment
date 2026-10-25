@@ -280,6 +280,23 @@ textarea.form-control {
   border-color: #059669;
 }
 
+/* Button Click Effect (Simple tactile feedback on press) */
+button:active,
+.btn:active,
+.tab-btn:active,
+.step-item:active,
+.nav-link:active,
+.btn-sm:active,
+.btn-lg:active,
+.btn-clear-file:active,
+input[type="button"]:active,
+input[type="submit"]:active {
+  transform: scale(0.96) translateY(1px);
+  filter: brightness(0.92);
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.15);
+  transition: transform 0.05s ease, filter 0.05s ease, box-shadow 0.05s ease;
+}
+
 /* Tables (Clear Borders, Clean Academic Look) */
 .table-responsive {
   width: 100%;
