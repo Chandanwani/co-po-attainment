@@ -558,10 +558,6 @@ function renderPOCharts(po_results, hasIndirect) {
     copoCharts['indirectBar'].destroy();
   }
 }
-      }
-    });
-  }
-}
 
 // Auto-restore saved matrix if user already calculated or uploaded earlier
 window.addEventListener('DOMContentLoaded', async () => {
