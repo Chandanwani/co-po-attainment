@@ -207,34 +207,73 @@ def create_co_barchart_drawing(weighted: Dict[str, Any]) -> Any:
     return d
 
 
-def create_po_barchart_drawing(copo: Dict[str, Any]) -> Any:
-    """Graph 4: Program Outcome (PO & PSO) Attainment Values (0-3 Points Scale)."""
+def create_po_direct_barchart_drawing(copo: Dict[str, Any]) -> Any:
+    """Graph 4: CO-PO-PSO Direct Attainment Profile (Blue: Mapping | Red: Direct Attainment)."""
     po_results = copo.get("po_results", [])
     if not po_results:
         return None
     labels = [str(p.get('po', '')) for p in po_results]
-    data_vals = [float(p.get('attainment', 0) or 0) if p.get('attainment') is not None else 0.0 for p in po_results]
+    mapping_vals = [float(p.get('mapping_avg', 0) or 0) for p in po_results]
+    direct_vals = [float(p.get('direct_attainment', 0) or 0) if p.get('direct_attainment') is not None else 0.0 for p in po_results]
 
-    d = Drawing(520, 120)
+    d = Drawing(520, 125)
     chart = VerticalBarChart()
-    chart.x = 40
+    chart.x = 35
     chart.y = 15
     chart.height = 85
-    chart.width = 460
-    chart.data = [data_vals]
+    chart.width = 470
+    chart.data = [mapping_vals, direct_vals]
     chart.categoryAxis.categoryNames = labels
-    chart.categoryAxis.labels.fontSize = 7
+    chart.categoryAxis.labels.fontSize = 6.5
     chart.valueAxis.valueMin = 0.0
-    chart.valueAxis.valueMax = 3.3
+    chart.valueAxis.valueMax = 3.5
     chart.valueAxis.valueStep = 0.5
     chart.valueAxis.labels.fontSize = 7
-    chart.bars[0].fillColor = colors.HexColor('#2563EB')
+    chart.bars[0].fillColor = colors.HexColor('#4F81BD')
+    chart.bars[1].fillColor = colors.HexColor('#C0504D')
     chart.barLabelFormat = '%.2f'
-    chart.barLabels.fontSize = 6.5
+    chart.barLabels.fontSize = 5.5
     chart.barLabels.boxAnchor = 's'
     chart.barLabels.dy = 2
     d.add(chart)
     return d
+
+
+def create_po_indirect_barchart_drawing(copo: Dict[str, Any]) -> Any:
+    """Graph 5: CO-PO-PSO Indirect Attainment Profile (Blue: Mapping | Red: Indirect Attainment)."""
+    po_results = copo.get("po_results", [])
+    if not po_results:
+        return None
+    labels = [str(p.get('po', '')) for p in po_results]
+    mapping_vals = [float(p.get('mapping_avg', 0) or 0) for p in po_results]
+    indirect_vals = [float(p.get('indirect_attainment', 0) or 0) if p.get('indirect_attainment') is not None else 0.0 for p in po_results]
+
+    d = Drawing(520, 125)
+    chart = VerticalBarChart()
+    chart.x = 35
+    chart.y = 15
+    chart.height = 85
+    chart.width = 470
+    chart.data = [mapping_vals, indirect_vals]
+    chart.categoryAxis.categoryNames = labels
+    chart.categoryAxis.labels.fontSize = 6.5
+    chart.valueAxis.valueMin = 0.0
+    chart.valueAxis.valueMax = 3.5
+    chart.valueAxis.valueStep = 0.5
+    chart.valueAxis.labels.fontSize = 7
+    chart.bars[0].fillColor = colors.HexColor('#4F81BD')
+    chart.bars[1].fillColor = colors.HexColor('#C0504D')
+    chart.barLabelFormat = '%.2f'
+    chart.barLabels.fontSize = 5.5
+    chart.barLabels.boxAnchor = 's'
+    chart.barLabels.dy = 2
+    d.add(chart)
+    return d
+
+
+def create_po_barchart_drawing(copo: Dict[str, Any]) -> Any:
+    """Backward compatibility helper for PO attainment chart."""
+    return create_po_direct_barchart_drawing(copo)
 
 
 def draw_page_decorations(canvas, doc):
@@ -672,9 +711,12 @@ def create_pdf_report(report_data: Dict[str, Any], include_charts: bool = True, 
                 charts_to_show.append(("<b>Graph 3: Course Outcome Attainment Comparison (Green: Direct | Amber: Indirect | Red: Combined)</b>", c4))
 
         if section in ["all", "copo"]:
-            c5 = create_po_barchart_drawing(copo)
+            c5 = create_po_direct_barchart_drawing(copo)
             if c5:
-                charts_to_show.append(("<b>Graph 4: Program Outcome (PO &amp; PSO) Attainment Profile (0-3 Points Scale)</b>", c5))
+                charts_to_show.append(("<b>Graph 4: CO-PO-PSO Direct Attainment Profile (Blue: Mapping Level | Red: Direct PO Attainment)</b>", c5))
+            c6 = create_po_indirect_barchart_drawing(copo)
+            if c6:
+                charts_to_show.append(("<b>Graph 5: CO-PO-PSO Indirect Attainment Profile (Blue: Mapping Level | Red: Indirect PO Attainment)</b>", c6))
 
         if charts_to_show:
             elements.append(PageBreak())

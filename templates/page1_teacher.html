@@ -105,7 +105,12 @@
             <option value="2027-28" {% if teacher.academic_year in ['2027-28', '2027-2028'] %}selected{% endif %}>2027-28</option>
             <option value="2028-29" {% if teacher.academic_year in ['2028-29', '2028-2029'] %}selected{% endif %}>2028-29</option>
             <option value="2029-30" {% if teacher.academic_year in ['2029-30', '2029-2030'] %}selected{% endif %}>2029-30</option>
-            {% if teacher.academic_year and teacher.academic_year not in ['2024-25', '2024-2025', '2025-26', '2025-2026', '2026-27', '2026-2027', '2027-28', '2027-2028', '2028-29', '2028-2029', '2029-30', '2029-2030'] %}
+            <option value="2030-31" {% if teacher.academic_year in ['2030-31', '2030-2031'] %}selected{% endif %}>2030-31</option>
+            <option value="2031-32" {% if teacher.academic_year in ['2031-32', '2031-2032'] %}selected{% endif %}>2031-32</option>
+            <option value="2032-33" {% if teacher.academic_year in ['2032-33', '2032-2033'] %}selected{% endif %}>2032-33</option>
+            <option value="2033-34" {% if teacher.academic_year in ['2033-34', '2033-2034'] %}selected{% endif %}>2033-34</option>
+            <option value="2034-35" {% if teacher.academic_year in ['2034-35', '2034-2035'] %}selected{% endif %}>2034-35</option>
+            {% if teacher.academic_year and teacher.academic_year not in ['2024-25', '2024-2025', '2025-26', '2025-2026', '2026-27', '2026-2027', '2027-28', '2027-2028', '2028-29', '2028-2029', '2029-30', '2029-2030', '2030-31', '2030-2031', '2031-32', '2031-2032', '2032-33', '2032-2033', '2033-34', '2033-2034', '2034-35', '2034-2035'] %}
             <option value="{{ teacher.academic_year }}" selected>{{ teacher.academic_year }}</option>
             {% endif %}
           </select>

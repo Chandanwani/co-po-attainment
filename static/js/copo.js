@@ -436,61 +436,91 @@ if (typeof Chart !== 'undefined' && Chart.register) {
 
 function renderPOCharts(po_results) {
   const labels = po_results.map(p => p.po);
-  const dataVals = po_results.map(p => p.attainment !== null ? p.attainment : 0);
+  const mappingVals = po_results.map(p => (p.mapping_avg !== undefined && p.mapping_avg !== null) ? p.mapping_avg : 0);
+  const directVals = po_results.map(p => (p.direct_attainment !== undefined && p.direct_attainment !== null) ? p.direct_attainment : 0);
+  const indirectVals = po_results.map(p => (p.indirect_attainment !== undefined && p.indirect_attainment !== null) ? p.indirect_attainment : 0);
 
-  // Bar Chart
-  const ctxBar = document.getElementById('chartPOAttainmentBar');
-  if (copoCharts['bar']) copoCharts['bar'].destroy();
-  copoCharts['bar'] = new Chart(ctxBar, {
-    type: 'bar',
-    data: {
-      labels: labels,
-      datasets: [{
-        label: 'PO Attainment Value (0-3)',
-        data: dataVals,
-        backgroundColor: '#2563eb',
-        borderRadius: 4
-      }]
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      scales: {
-        y: { beginAtZero: true, max: 3.3, ticks: { stepSize: 0.5 } }
-      }
-    }
-  });
-
-  // Radar / Spider Chart
-  const ctxRadar = document.getElementById('chartPOAttainmentRadar');
-  if (copoCharts['radar']) copoCharts['radar'].destroy();
-  copoCharts['radar'] = new Chart(ctxRadar, {
-    type: 'radar',
-    data: {
-      labels: labels,
-      datasets: [{
-        label: 'PO Attainment Profile',
-        data: dataVals,
-        backgroundColor: 'rgba(37, 99, 235, 0.2)',
-        borderColor: '#2563eb',
-        pointBackgroundColor: '#1e40af',
-        pointBorderColor: '#fff',
-        pointHoverBackgroundColor: '#fff',
-        pointHoverBorderColor: '#1e40af'
-      }]
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      scales: {
-        r: {
-          beginAtZero: true,
-          max: 3.0,
-          ticks: { stepSize: 0.5 }
+  // 1. Direct Attainment vs Mapping Bar Chart (Excel Style: Blue #4F81BD vs Red #C0504D)
+  const ctxDirect = document.getElementById('chartPODirectBar');
+  if (ctxDirect) {
+    if (copoCharts['directBar']) copoCharts['directBar'].destroy();
+    copoCharts['directBar'] = new Chart(ctxDirect, {
+      type: 'bar',
+      data: {
+        labels: labels,
+        datasets: [
+          {
+            label: 'CO-PO-PSO Mapping',
+            data: mappingVals,
+            backgroundColor: '#4F81BD',
+            borderColor: '#385D8A',
+            borderWidth: 1,
+            borderRadius: 3
+          },
+          {
+            label: 'CO-PO-PSO Direct Attainment',
+            data: directVals,
+            backgroundColor: '#C0504D',
+            borderColor: '#943734',
+            borderWidth: 1,
+            borderRadius: 3
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { position: 'top', labels: { font: { size: 11, weight: 'bold' } } }
+        },
+        scales: {
+          y: { beginAtZero: true, max: 3.5, ticks: { stepSize: 0.5 } },
+          x: { ticks: { font: { size: 10, weight: 'bold' } } }
         }
       }
-    }
-  });
+    });
+  }
+
+  // 2. Indirect Attainment vs Mapping Bar Chart (Excel Style: Blue #4F81BD vs Red #C0504D)
+  const ctxIndirect = document.getElementById('chartPOIndirectBar');
+  if (ctxIndirect) {
+    if (copoCharts['indirectBar']) copoCharts['indirectBar'].destroy();
+    copoCharts['indirectBar'] = new Chart(ctxIndirect, {
+      type: 'bar',
+      data: {
+        labels: labels,
+        datasets: [
+          {
+            label: 'CO-PO-PSO Mapping',
+            data: mappingVals,
+            backgroundColor: '#4F81BD',
+            borderColor: '#385D8A',
+            borderWidth: 1,
+            borderRadius: 3
+          },
+          {
+            label: 'CO-PO-PSO Indirect Attainment',
+            data: indirectVals,
+            backgroundColor: '#C0504D',
+            borderColor: '#943734',
+            borderWidth: 1,
+            borderRadius: 3
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { position: 'top', labels: { font: { size: 11, weight: 'bold' } } }
+        },
+        scales: {
+          y: { beginAtZero: true, max: 3.5, ticks: { stepSize: 0.5 } },
+          x: { ticks: { font: { size: 10, weight: 'bold' } } }
+        }
+      }
+    });
+  }
 }
 
 // Auto-restore saved matrix if user already calculated or uploaded earlier

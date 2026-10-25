@@ -398,6 +398,7 @@ def create_complete_excel_report(report_data: Dict[str, Any]) -> io.BytesIO:
         ("CO-PO-PSO Indirect Attainment", "indirect_attainment", PatternFill(start_color="FEF9C3", end_color="FEF9C3", fill_type="solid")),
         ("Final / Combined Attainment", "attainment", PatternFill(start_color="DBEAFE", end_color="DBEAFE", fill_type="solid"))
     ]
+    summary_start_row = r_idx
 
     for label, field_key, fill_color in summary_rows_def:
         ws_map.cell(row=r_idx, column=1, value=label).font = BOLD_FONT
@@ -408,16 +409,61 @@ def create_complete_excel_report(report_data: Dict[str, Any]) -> io.BytesIO:
         for c_idx, po in enumerate(po_list, start=2):
             p_obj = po_map.get(po, {})
             val = p_obj.get(field_key)
-            if val is None or val == "":
-                disp_val = "-"
+            if val is None or val == "" or val == "-":
+                disp_val = 0.0
             else:
-                disp_val = val
+                try:
+                    disp_val = float(val)
+                except (ValueError, TypeError):
+                    disp_val = 0.0
             cell = ws_map.cell(row=r_idx, column=c_idx, value=disp_val)
             cell.font = BOLD_FONT
             cell.border = CELL_BORDER
             cell.fill = fill_color
             cell.alignment = Alignment(horizontal="center")
         r_idx += 1
+
+    # Embed reference-style BarCharts (Direct & Indirect) into Sheet 7
+    try:
+        from openpyxl.chart import BarChart, Reference
+        cats = Reference(ws_map, min_col=2, min_row=3, max_col=1 + len(po_list), max_row=3)
+        map_row = summary_start_row
+        dir_row = summary_start_row + 1
+        ind_row = summary_start_row + 2
+
+        # 1. Direct PO Attainment BarChart (Mapping vs Direct)
+        chart_dir = BarChart()
+        chart_dir.type = "col"
+        chart_dir.title = "CO-PO-PSO Direct Attainment Profile"
+        chart_dir.y_axis.title = "Attainment Level (0-3)"
+        chart_dir.x_axis.title = "Program Outcomes"
+        chart_dir.width = 17
+        chart_dir.height = 9.5
+        chart_dir.add_data(Reference(ws_map, min_col=1, min_row=map_row, max_col=1 + len(po_list), max_row=map_row), titles_from_data=True, from_rows=True)
+        chart_dir.add_data(Reference(ws_map, min_col=1, min_row=dir_row, max_col=1 + len(po_list), max_row=dir_row), titles_from_data=True, from_rows=True)
+        chart_dir.set_categories(cats)
+        if len(chart_dir.series) >= 2:
+            chart_dir.series[0].graphicalProperties.solidFill = "4F81BD"
+            chart_dir.series[1].graphicalProperties.solidFill = "C0504D"
+        ws_map.add_chart(chart_dir, f"A{r_idx + 2}")
+
+        # 2. Indirect PO Attainment BarChart (Mapping vs Indirect)
+        chart_ind = BarChart()
+        chart_ind.type = "col"
+        chart_ind.title = "CO-PO-PSO Indirect Attainment Profile"
+        chart_ind.y_axis.title = "Attainment Level (0-3)"
+        chart_ind.x_axis.title = "Program Outcomes"
+        chart_ind.width = 17
+        chart_ind.height = 9.5
+        chart_ind.add_data(Reference(ws_map, min_col=1, min_row=map_row, max_col=1 + len(po_list), max_row=map_row), titles_from_data=True, from_rows=True)
+        chart_ind.add_data(Reference(ws_map, min_col=1, min_row=ind_row, max_col=1 + len(po_list), max_row=ind_row), titles_from_data=True, from_rows=True)
+        chart_ind.set_categories(cats)
+        if len(chart_ind.series) >= 2:
+            chart_ind.series[0].graphicalProperties.solidFill = "4F81BD"
+            chart_ind.series[1].graphicalProperties.solidFill = "C0504D"
+        ws_map.add_chart(chart_ind, f"I{r_idx + 2}")
+    except Exception as e:
+        pass
 
     auto_fit_columns(ws_map)
 
