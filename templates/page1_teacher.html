@@ -244,40 +244,11 @@ function clearTeacherForm() {
   fetch('/api/reset-session', { method: 'POST' }).catch(() => {});
 }
 
-// Pre-fill ONLY when actively navigating back from Step 2 with ?nav=1
+// Start fresh by default when landing on the first page
 window.addEventListener('DOMContentLoaded', () => {
   updateBatchOptions();
-  if (urlParams.get('new') === '1' || urlParams.get('nav') !== '1') {
-    // Visiting root or starting fresh: clear fields completely
-    clearTeacherFormQuiet();
-    return;
-  }
-  const stored = (typeof getStoredState === 'function') ? getStoredState() : {};
-  if (stored && stored.teacher) {
-    const t = stored.teacher;
-    const fnInp = document.getElementById('faculty_name');
-    if (fnInp && !fnInp.value && t.faculty_name) fnInp.value = t.faculty_name;
-    const subInp = document.getElementById('subject');
-    if (subInp && !subInp.value && t.subject) subInp.value = t.subject;
-    const clsInp = document.getElementById('class_name');
-    if (clsInp && !clsInp.value && t.class_name) clsInp.value = t.class_name;
-    const divInp = document.getElementById('division');
-    if (divInp && !divInp.value && t.division) divInp.value = t.division;
-    const semInp = document.getElementById('semester');
-    if (semInp && !semInp.value && t.semester) semInp.value = t.semester;
-    const ayInp = document.getElementById('academic_year');
-    if (ayInp && !ayInp.value && t.academic_year) ayInp.value = t.academic_year;
-    
-    updateBatchOptions(t.batch);
-    if (t.course_type === 'practical') {
-      const radPrac = document.getElementById('course_type_practical');
-      if (radPrac) radPrac.checked = true;
-    } else {
-      const radTh = document.getElementById('course_type_theory');
-      if (radTh) radTh.checked = true;
-    }
-    onCourseTypeChange();
-  }
+  clearTeacherFormQuiet();
+  fetch('/api/reset-session', { method: 'POST' }).catch(() => {});
 });
 
 async function handleTeacherSubmit(e) {

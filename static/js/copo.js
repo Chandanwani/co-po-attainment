@@ -3,8 +3,8 @@
  */
 
 let currentCOPOState = {
-  co_list: ['CO1', 'CO2', 'CO3', 'CO4', 'CO5'],
-  po_list: ['PO1', 'PO2', 'PO3', 'PO4', 'PO5', 'PO6', 'PO7', 'PO8', 'PO9', 'PO10', 'PO11', 'PSO1', 'PSO2', 'PSO3'],
+  co_list: ['CO1', 'CO2', 'CO3', 'CO4', 'CO5', 'CO6'],
+  po_list: ['PO1', 'PO2', 'PO3', 'PO4', 'PO5', 'PO6', 'PO7', 'PO8', 'PO9', 'PO10', 'PO11', 'PO12', 'PSO1', 'PSO2', 'PSO3'],
   matrix: {}
 };
 let copoCharts = {};
@@ -97,7 +97,7 @@ async function initializeBlankMatrix() {
     console.warn('Could not fetch evaluated COs:', e);
   }
 
-  const po_list = ['PO1', 'PO2', 'PO3', 'PO4', 'PO5', 'PO6', 'PO7', 'PO8', 'PO9', 'PO10', 'PO11', 'PSO1', 'PSO2', 'PSO3'];
+  const po_list = ['PO1', 'PO2', 'PO3', 'PO4', 'PO5', 'PO6', 'PO7', 'PO8', 'PO9', 'PO10', 'PO11', 'PO12', 'PSO1', 'PSO2', 'PSO3'];
   const matrix = {};
 
   co_list.forEach(co => {
@@ -319,6 +319,7 @@ async function calculatePOAttainment() {
 }
 
 function renderPOResults(data) {
+  currentCOPOState.lastResult = data;
   const tbody = document.getElementById('poResultsTable').querySelector('tbody');
   tbody.innerHTML = '';
 
@@ -328,6 +329,9 @@ function renderPOResults(data) {
   data.po_results.forEach(p => {
     const tr = document.createElement('tr');
     const attDisp = p.attainment !== null ? p.attainment : '-';
+    const directDisp = (p.direct_attainment !== undefined && p.direct_attainment !== null) ? p.direct_attainment : '-';
+    const indirectDisp = (p.indirect_attainment !== undefined && p.indirect_attainment !== null) ? p.indirect_attainment : '-';
+    const avgMapDisp = (p.mapping_avg !== undefined && p.mapping_avg !== null) ? p.mapping_avg : '-';
     const contribStr = p.contributing_cos.map(c => `${c.co} (L${c.level})`).join(', ') || 'None';
 
     let levelBadge = '<span class="badge" style="background:#f1f5f9;color:#64748b;">Not Mapped</span>';
@@ -341,7 +345,9 @@ function renderPOResults(data) {
     tr.innerHTML = `
       <td class="bold">${p.po}</td>
       <td class="text-center">${p.mapping_sum}</td>
-      <td class="text-center">${p.weighted_sum}</td>
+      <td class="text-center bold">${avgMapDisp}</td>
+      <td class="text-center" style="color:#166534; font-weight:600;">${directDisp}</td>
+      <td class="text-center" style="color:#854d0e; font-weight:600;">${indirectDisp}</td>
       <td class="text-center bold" style="color:var(--accent); font-size:14px;">${attDisp}</td>
       <td class="text-center">${levelBadge}</td>
       <td><span style="font-size:12px; color:var(--text-muted);">${contribStr}</span></td>
@@ -349,7 +355,50 @@ function renderPOResults(data) {
     tbody.appendChild(tr);
   });
 
+  renderMatrixFooter(data);
   renderPOCharts(data.po_results);
+}
+
+function renderMatrixFooter(data) {
+  const table = document.getElementById('copoMatrixTable');
+  if (!table) return;
+  let tfoot = table.querySelector('tfoot');
+  if (!tfoot) {
+    tfoot = document.createElement('tfoot');
+    table.appendChild(tfoot);
+  }
+  tfoot.innerHTML = '';
+
+  const poResultsMap = {};
+  if (data && data.po_results) {
+    data.po_results.forEach(p => {
+      poResultsMap[p.po] = p;
+    });
+  }
+
+  const rowsConfig = [
+    { label: 'CO-PO-PSO Mapping (Average Level)', key: 'mapping_avg', bg: '#f8fafc', color: '#1e293b' },
+    { label: 'Direct PO Attainment', key: 'direct_attainment', bg: '#f0fdf4', color: '#166534' },
+    { label: 'Indirect PO Attainment', key: 'indirect_attainment', bg: '#fefce8', color: '#854d0e' },
+    { label: 'Final Combined Attainment', key: 'attainment', bg: '#eff6ff', color: '#1d4ed8' }
+  ];
+
+  rowsConfig.forEach(cfg => {
+    const tr = document.createElement('tr');
+    tr.style.backgroundColor = cfg.bg;
+    let html = `<td class="bold" style="color: ${cfg.color}; font-size: 11.5px; white-space: nowrap; padding: 6px 8px;">${cfg.label}</td>`;
+    currentCOPOState.po_list.forEach(po => {
+      const p = poResultsMap[po];
+      let val = '-';
+      if (p && p[cfg.key] !== undefined && p[cfg.key] !== null) {
+        val = p[cfg.key];
+      }
+      html += `<td class="text-center bold" style="color: ${cfg.color}; font-size: 12px; padding: 6px 4px;">${val}</td>`;
+    });
+    html += `<td></td>`;
+    tr.innerHTML = html;
+    tfoot.appendChild(tr);
+  });
 }
 
 // Custom Chart.js Plugin: Draw data value on top of each bar

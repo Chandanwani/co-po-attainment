@@ -390,6 +390,35 @@ def create_complete_excel_report(report_data: Dict[str, Any]) -> io.BytesIO:
                 cell.font = BOLD_FONT
         r_idx += 1
 
+    # Reference DY Patil format: 4 summary rows under matrix
+    po_map = {p.get("po"): p for p in po_results}
+    summary_rows_def = [
+        ("CO-PO-PSO Mapping (Average Level)", "mapping_avg", PatternFill(start_color="F1F5F9", end_color="F1F5F9", fill_type="solid")),
+        ("CO-PO-PSO Direct Attainment", "direct_attainment", PatternFill(start_color="DCFCE7", end_color="DCFCE7", fill_type="solid")),
+        ("CO-PO-PSO Indirect Attainment", "indirect_attainment", PatternFill(start_color="FEF9C3", end_color="FEF9C3", fill_type="solid")),
+        ("Final / Combined Attainment", "attainment", PatternFill(start_color="DBEAFE", end_color="DBEAFE", fill_type="solid"))
+    ]
+
+    for label, field_key, fill_color in summary_rows_def:
+        ws_map.cell(row=r_idx, column=1, value=label).font = BOLD_FONT
+        ws_map.cell(row=r_idx, column=1).border = CELL_BORDER
+        ws_map.cell(row=r_idx, column=1).fill = fill_color
+        ws_map.cell(row=r_idx, column=1).alignment = Alignment(horizontal="left")
+
+        for c_idx, po in enumerate(po_list, start=2):
+            p_obj = po_map.get(po, {})
+            val = p_obj.get(field_key)
+            if val is None or val == "":
+                disp_val = "-"
+            else:
+                disp_val = val
+            cell = ws_map.cell(row=r_idx, column=c_idx, value=disp_val)
+            cell.font = BOLD_FONT
+            cell.border = CELL_BORDER
+            cell.fill = fill_color
+            cell.alignment = Alignment(horizontal="center")
+        r_idx += 1
+
     auto_fit_columns(ws_map)
 
     # ========================================================
@@ -402,7 +431,8 @@ def create_complete_excel_report(report_data: Dict[str, Any]) -> io.BytesIO:
     ws_po["A1"].font = SECTION_FONT
 
     headers_po = [
-        "Program Outcome", "Mapping Level Sum", "Weighted CO Sum",
+        "Program Outcome", "Mapping Level Sum", "Average Mapping Level",
+        "Direct PO Attainment", "Indirect PO Attainment",
         "PO Attainment (0-3)", "Attainment Level"
     ]
     for c_idx, h in enumerate(headers_po, start=1):
@@ -413,15 +443,22 @@ def create_complete_excel_report(report_data: Dict[str, Any]) -> io.BytesIO:
     for p in po_results:
         att = p.get("attainment")
         att_display = att if att is not None else "N/A"
+        dir_att = p.get("direct_attainment")
+        dir_display = dir_att if dir_att is not None else "N/A"
+        ind_att = p.get("indirect_attainment")
+        ind_display = ind_att if ind_att is not None else "N/A"
+        avg_map = p.get("mapping_avg", "N/A")
+
         row_vals = [
-            p.get("po"), p.get("mapping_sum"), p.get("weighted_sum"),
+            p.get("po"), p.get("mapping_sum"), avg_map,
+            dir_display, ind_display,
             att_display, p.get("level_label")
         ]
         for c_idx, val in enumerate(row_vals, start=1):
             cell = ws_po.cell(row=r_idx, column=c_idx, value=val)
             cell.font = REGULAR_FONT
             cell.border = CELL_BORDER
-            cell.alignment = Alignment(horizontal="center" if c_idx != 5 else "left")
+            cell.alignment = Alignment(horizontal="center" if c_idx != 7 else "left")
             if r_idx % 2 == 1:
                 cell.fill = ZEBRA_FILL
         r_idx += 1

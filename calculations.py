@@ -599,11 +599,14 @@ def compute_po_attainment(
     mapping_matrix: Dict[str, Dict[str, float]],
     co_attainments: Dict[str, float],
     po_list: Optional[List[str]] = None,
-    co_list: Optional[List[str]] = None
+    co_list: Optional[List[str]] = None,
+    direct_co_attainments: Optional[Dict[str, float]] = None,
+    indirect_co_attainments: Optional[Dict[str, float]] = None
 ) -> Dict[str, Any]:
     """
     Computes PO & PSO attainment from mapped CO attainments:
     PO Attainment = sum(Mapping_ij * CO_Attainment_i) / sum(Mapping_ij)
+    Also computes Direct and Indirect PO Attainment and Average Mapping level.
     """
     if co_list is None:
         co_list = sorted(
@@ -626,10 +629,13 @@ def compute_po_attainment(
         po_list = sorted(list(po_set), key=po_sort_key)
 
     po_results = []
+    mapping_averages = {}
     
     for po in po_list:
         weighted_sum = 0.0
         mapping_sum = 0.0
+        direct_weighted_sum = 0.0
+        indirect_weighted_sum = 0.0
         contributing_cos = []
 
         for co in co_list:
@@ -645,19 +651,38 @@ def compute_po_attainment(
                 mapping_sum += level_float
                 contributing_cos.append({'co': co, 'level': level_float, 'co_attainment': co_att})
 
+                if direct_co_attainments is not None:
+                    d_att = direct_co_attainments.get(co, 0.0)
+                    direct_weighted_sum += (level_float * d_att)
+
+                if indirect_co_attainments is not None:
+                    i_att = indirect_co_attainments.get(co, 0.0)
+                    indirect_weighted_sum += (level_float * i_att)
+
+        # Average mapping level across all course COs (reference DY Patil format)
+        mapping_avg = round(mapping_sum / len(co_list), 2) if co_list else 0.0
+        mapping_averages[po] = mapping_avg
+
         if mapping_sum > 0:
             po_att = round(weighted_sum / mapping_sum, 3)
             po_att_0_1 = round(po_att / 3.0, 3) if po_att <= 3.0 else round(po_att, 3)
             level_label = get_attainment_level_label(po_att)
+            direct_po_att = round(direct_weighted_sum / mapping_sum, 3) if direct_co_attainments is not None else po_att
+            indirect_po_att = round(indirect_weighted_sum / mapping_sum, 3) if indirect_co_attainments is not None else None
         else:
             po_att = None
             po_att_0_1 = None
             level_label = "Not Mapped"
+            direct_po_att = 0.0
+            indirect_po_att = 0.0
 
         po_results.append({
             'po': po,
             'mapping_sum': round(mapping_sum, 2),
+            'mapping_avg': mapping_avg,
             'weighted_sum': round(weighted_sum, 3),
+            'direct_attainment': direct_po_att,
+            'indirect_attainment': indirect_po_att,
             'attainment': po_att,
             'attainment_0_1': po_att_0_1,
             'level_label': level_label,
@@ -672,6 +697,7 @@ def compute_po_attainment(
         'po_list': po_list,
         'co_list': co_list,
         'po_results': po_results,
+        'mapping_averages': mapping_averages,
         'overall_po_attainment': overall_po_att,
         'overall_po_attainment_0_1': overall_po_0_1,
         'overall_po_level': get_attainment_level_label(overall_po_att) if valid_po_atts else "Not Mapped"

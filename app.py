@@ -195,26 +195,17 @@ def serve_static(filename):
 @app.route('/teacher')
 @app.route('/')
 def page1_teacher():
-    """Page 1: Teacher & Course information (NO NAVBAR)."""
-    # If starting fresh (visiting / or ?new=1 or not explicitly navigating back from step 2)
-    nav_back = request.args.get('nav') == '1'
-    if not nav_back or request.args.get('new') == '1':
-        session.clear()
-        session['sid'] = secrets.token_hex(16)
-        sid = session['sid']
-        TEMP_DATA_STORE[sid] = {
-            'teacher': {'faculty_name': '', 'subject': '', 'course_type': 'theory', 'batch': '', 'class_name': '', 'division': '', 'semester': '', 'academic_year': ''},
-            'direct_raw': None, 'direct_computed': None, 'indirect_raw': None, 'indirect_computed': None,
-            'weighted_computed': None, 'copo_mapping': None, 'copo_computed': None
-        }
-        save_session_state(sid)
-        return render_template('page1_teacher.html', teacher={}, page_step=1)
-
-    sid = get_session_id()
-    teacher = TEMP_DATA_STORE[sid].get('teacher', {})
-    if not teacher.get('faculty_name') and 'teacher' in session:
-        teacher = session['teacher']
-    return render_template('page1_teacher.html', teacher=teacher, page_step=1)
+    """Page 1: Teacher & Course information (NO NAVBAR). Restarts session fresh by default."""
+    session.clear()
+    session['sid'] = secrets.token_hex(16)
+    sid = session['sid']
+    TEMP_DATA_STORE[sid] = {
+        'teacher': {'faculty_name': '', 'subject': '', 'course_type': 'theory', 'batch': '', 'class_name': '', 'division': '', 'semester': '', 'academic_year': ''},
+        'direct_raw': None, 'direct_computed': None, 'indirect_raw': None, 'indirect_computed': None,
+        'weighted_computed': None, 'copo_mapping': None, 'copo_computed': None
+    }
+    save_session_state(sid)
+    return render_template('page1_teacher.html', teacher={}, page_step=1)
 
 
 @app.route('/assessment')
@@ -929,26 +920,46 @@ def api_compute_copo():
     # Get combined CO attainments
     weighted_data = TEMP_DATA_STORE[sid].get('weighted_computed')
     direct_data = TEMP_DATA_STORE[sid].get('direct_computed')
+    indirect_data = TEMP_DATA_STORE[sid].get('indirect_computed')
 
     co_attainments = {}
+    direct_co_atts = {}
+    indirect_co_atts = {}
+
+    if direct_data and direct_data.get('co_summaries'):
+        for item in direct_data['co_summaries']:
+            direct_co_atts[item['co']] = item.get('attainment', 0.0)
+
+    if indirect_data and indirect_data.get('co_summaries'):
+        for item in indirect_data['co_summaries']:
+            indirect_co_atts[item['co']] = item.get('attainment', 0.0)
+
     if weighted_data and weighted_data.get('combined_results'):
         for item in weighted_data['combined_results']:
-            co_attainments[item['co']] = item['combined_attainment']
+            co_attainments[item['co']] = item.get('combined_attainment', item.get('attainment', 0.0))
     elif direct_data and direct_data.get('co_summaries'):
         for item in direct_data['co_summaries']:
-            co_attainments[item['co']] = item['attainment']
+            co_attainments[item['co']] = item.get('attainment', 0.0)
     else:
         # Default fallback
         for co in matrix.keys():
             co_attainments[co] = 2.0
 
-    result = compute_po_attainment(matrix, co_attainments, po_list, co_list)
+    result = compute_po_attainment(
+        matrix,
+        co_attainments,
+        po_list,
+        co_list,
+        direct_co_attainments=direct_co_atts if direct_co_atts else None,
+        indirect_co_attainments=indirect_co_atts if indirect_co_atts else None
+    )
     
     TEMP_DATA_STORE[sid]['copo_computed'] = {
         'matrix': matrix,
         'co_list': result['co_list'],
         'po_list': result['po_list'],
         'po_results': result['po_results'],
+        'mapping_averages': result.get('mapping_averages', {}),
         'overall_po_attainment': result['overall_po_attainment'],
         'overall_po_level': result['overall_po_level']
     }

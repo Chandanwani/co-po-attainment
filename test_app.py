@@ -717,6 +717,52 @@ def test_sample_practical_marks_50_xlsx_upload():
     assert len(comp_json['data']['co_summaries']) == 3
 
 
+def test_reference_co_po_direct_indirect_and_reset():
+    """Verify DY Patil reference format calculations for direct/indirect PO attainment, average mapping, and default reset."""
+    matrix = {
+        'CO1': {'PO1': 3, 'PO2': 2, 'PO3': 0},
+        'CO2': {'PO1': 2, 'PO2': 3, 'PO3': 0},
+    }
+    co_atts = {'CO1': 2.5, 'CO2': 2.0}
+    direct_atts = {'CO1': 2.4, 'CO2': 1.8}
+    indirect_atts = {'CO1': 2.8, 'CO2': 2.6}
+
+    result = compute_po_attainment(
+        mapping_matrix=matrix,
+        co_attainments=co_atts,
+        po_list=['PO1', 'PO2', 'PO3'],
+        co_list=['CO1', 'CO2'],
+        direct_co_attainments=direct_atts,
+        indirect_co_attainments=indirect_atts
+    )
+
+    po_dict = {p['po']: p for p in result['po_results']}
+
+    # PO1: mapping_sum = 3 + 2 = 5, len(co_list) = 2 -> mapping_avg = 5 / 2 = 2.5
+    assert po_dict['PO1']['mapping_avg'] == 2.5
+    # PO1 direct_att = (3*2.4 + 2*1.8) / 5 = (7.2 + 3.6)/5 = 10.8/5 = 2.16
+    assert po_dict['PO1']['direct_attainment'] == 2.16
+    # PO1 indirect_att = (3*2.8 + 2*2.6) / 5 = (8.4 + 5.2)/5 = 13.6/5 = 2.72
+    assert po_dict['PO1']['indirect_attainment'] == 2.72
+    # PO1 combined_att = (3*2.5 + 2*2.0) / 5 = (7.5 + 4.0)/5 = 11.5/5 = 2.3
+    assert po_dict['PO1']['attainment'] == 2.3
+
+    # PO3: unmapped -> mapping_avg = 0.0, direct = 0.0, indirect = 0.0, attainment = None
+    assert po_dict['PO3']['mapping_avg'] == 0.0
+    assert po_dict['PO3']['direct_attainment'] == 0.0
+    assert po_dict['PO3']['attainment'] is None
+
+    # Test default session reset on visiting / or /teacher
+    client = app.test_client()
+    with client.session_transaction() as sess:
+        sess['teacher'] = {'faculty_name': 'Existing Faculty'}
+    res = client.get('/teacher')
+    assert res.status_code == 200
+    # Session must be fresh and clean
+    with client.session_transaction() as sess:
+        assert sess.get('teacher', {}).get('faculty_name') != 'Existing Faculty'
+
+
 if __name__ == '__main__':
     test_gapc_attainment_formula()
     print("[PASS] test_gapc_attainment_formula")
@@ -754,4 +800,6 @@ if __name__ == '__main__':
     print("[PASS] test_practicle_column_parsing_and_mapping")
     test_sample_practical_marks_50_xlsx_upload()
     print("[PASS] test_sample_practical_marks_50_xlsx_upload")
-    print("\nALL 18 TEST SUITES PASSED SUCCESSFULLY!")
+    test_reference_co_po_direct_indirect_and_reset()
+    print("[PASS] test_reference_co_po_direct_indirect_and_reset")
+    print("\nALL 19 TEST SUITES PASSED SUCCESSFULLY!")

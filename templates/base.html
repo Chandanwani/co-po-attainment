@@ -15,7 +15,7 @@
   {% if page_step and page_step > 1 %}
   <header class="steps-nav">
     <div class="steps-list">
-      <a href="{{ url_for('page1_teacher') }}?nav=1" class="step-item {% if page_step == 1 %}active{% endif %}">
+      <a href="{{ url_for('page1_teacher') }}" class="step-item {% if page_step == 1 %}active{% endif %}">
         <span class="step-badge">1</span> Teacher &amp; Course
       </a>
       <span class="step-divider">&rarr;</span>

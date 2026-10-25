@@ -202,6 +202,40 @@ function renderReport(state) {
     tbodyMatrix.appendChild(tr);
   });
 
+  // Footer on matrix with reference DY Patil format rows
+  let tfootMatrix = tableMatrix.querySelector('tfoot');
+  if (!tfootMatrix) {
+    tfootMatrix = document.createElement('tfoot');
+    tableMatrix.appendChild(tfootMatrix);
+  }
+  tfootMatrix.innerHTML = '';
+
+  const poResMap = {};
+  (copo.po_results || []).forEach(p => { poResMap[p.po] = p; });
+
+  const summaryConfigs = [
+    { label: 'CO-PO-PSO Mapping (Average)', key: 'mapping_avg', bg: '#f8fafc', color: '#1e293b' },
+    { label: 'Direct PO Attainment', key: 'direct_attainment', bg: '#f0fdf4', color: '#166534' },
+    { label: 'Indirect PO Attainment', key: 'indirect_attainment', bg: '#fefce8', color: '#854d0e' },
+    { label: 'Final Combined Attainment', key: 'attainment', bg: '#eff6ff', color: '#1d4ed8' }
+  ];
+
+  summaryConfigs.forEach(cfg => {
+    const tr = document.createElement('tr');
+    tr.style.backgroundColor = cfg.bg;
+    let html = `<td class="bold" style="color:${cfg.color}; font-size:11px; white-space:nowrap; padding:4px 6px;">${cfg.label}</td>`;
+    po_list.forEach(po => {
+      const p = poResMap[po];
+      let val = '-';
+      if (p && p[cfg.key] !== undefined && p[cfg.key] !== null) {
+        val = p[cfg.key];
+      }
+      html += `<td class="text-center bold" style="color:${cfg.color}; font-size:11.5px; padding:4px 2px;">${val}</td>`;
+    });
+    tr.innerHTML = html;
+    tfootMatrix.appendChild(tr);
+  });
+
   // 4. PO Attainment Table
   const tbodyPO = document.getElementById('repPOTable').querySelector('tbody');
   tbodyPO.innerHTML = '';
@@ -212,11 +246,16 @@ function renderReport(state) {
   (copo.po_results || []).forEach(p => {
     const tr = document.createElement('tr');
     const attDisp = p.attainment !== null ? p.attainment : '-';
+    const directDisp = (p.direct_attainment !== undefined && p.direct_attainment !== null) ? p.direct_attainment : '-';
+    const indirectDisp = (p.indirect_attainment !== undefined && p.indirect_attainment !== null) ? p.indirect_attainment : '-';
+    const avgMapDisp = (p.mapping_avg !== undefined && p.mapping_avg !== null) ? p.mapping_avg : '-';
     const contribStr = (p.contributing_cos || []).map(c => `${c.co} (L${c.level})`).join(', ') || 'None';
     tr.innerHTML = `
       <td class="bold">${p.po}</td>
       <td class="text-center">${p.mapping_sum}</td>
-      <td class="text-center">${p.weighted_sum}</td>
+      <td class="text-center bold">${avgMapDisp}</td>
+      <td class="text-center" style="color:#166534; font-weight:600;">${directDisp}</td>
+      <td class="text-center" style="color:#854d0e; font-weight:600;">${indirectDisp}</td>
       <td class="text-center bold" style="color:var(--accent); font-size:14px;">${attDisp}</td>
       <td class="text-center">${getBadgeHtml(p.level_label)}</td>
       <td><span style="font-size:12px; color:var(--text-muted);">${contribStr}</span></td>

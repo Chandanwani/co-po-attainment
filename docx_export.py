@@ -287,15 +287,15 @@ def create_word_report(report_data: Dict[str, Any]) -> io.BytesIO:
     h6_run.font.color.rgb = RGBColor(30, 41, 59)
 
     if po_results:
-        table_po = doc.add_table(rows=len(po_results) + 1, cols=4)
-        hdrs = ["Program Outcome", "Mapping Level Sum", "PO Attainment (0-3)", "Attainment Level"]
+        table_po = doc.add_table(rows=len(po_results) + 1, cols=7)
+        hdrs = ["Program Outcome", "Mapping Sum", "Avg Map", "Direct PO", "Indirect PO", "Final PO (0-3)", "Attainment Level"]
         for c_idx, h in enumerate(hdrs):
             cell = table_po.rows[0].cells[c_idx]
             set_cell_background(cell, "1E293B")
             p = cell.paragraphs[0]
             run = p.add_run(h)
             run.bold = True
-            run.font.size = Pt(9)
+            run.font.size = Pt(8.5)
             run.font.color.rgb = RGBColor(255, 255, 255)
             p.alignment = WD_ALIGN_PARAGRAPH.CENTER
 
@@ -303,16 +303,30 @@ def create_word_report(report_data: Dict[str, Any]) -> io.BytesIO:
             row = table_po.rows[r_idx]
             att = p_item.get("attainment")
             att_disp = str(att) if att is not None else "N/A"
-            vals = [p_item.get("po"), str(p_item.get("mapping_sum")), att_disp, p_item.get("level_label")]
+            dir_att = p_item.get("direct_attainment")
+            dir_disp = str(dir_att) if dir_att is not None else "N/A"
+            ind_att = p_item.get("indirect_attainment")
+            ind_disp = str(ind_att) if ind_att is not None else "N/A"
+            avg_m = str(p_item.get("mapping_avg", "N/A"))
+
+            vals = [
+                p_item.get("po"),
+                str(p_item.get("mapping_sum")),
+                avg_m,
+                dir_disp,
+                ind_disp,
+                att_disp,
+                p_item.get("level_label")
+            ]
             for c_idx, val in enumerate(vals):
                 cell = row.cells[c_idx]
                 if r_idx % 2 == 0:
                     set_cell_background(cell, "F8FAFC")
                 p = cell.paragraphs[0]
                 run = p.add_run(str(val))
-                run.font.size = Pt(9)
-                p.alignment = WD_ALIGN_PARAGRAPH.CENTER if c_idx != 3 else WD_ALIGN_PARAGRAPH.LEFT
-        style_table(table_po, [1.8, 1.5, 1.6, 1.8])
+                run.font.size = Pt(8.5)
+                p.alignment = WD_ALIGN_PARAGRAPH.CENTER if c_idx != 6 else WD_ALIGN_PARAGRAPH.LEFT
+        style_table(table_po, [1.1, 0.8, 0.8, 0.9, 0.9, 1.0, 1.3])
 
     out = io.BytesIO()
     doc.save(out)
