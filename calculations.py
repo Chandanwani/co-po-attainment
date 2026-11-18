@@ -364,7 +364,9 @@ def validate_and_compute_direct(
             'co_summaries': co_summaries,
             'score_ranges': score_ranges,
             'avg_student_pct': round(avg_student_pct, 2),
-            'overall_passed_students': sum(1 for s in validated_students if s['percentage'] >= (passing_threshold_ratio * 100))
+            'overall_passed_students': sum(1 for s in validated_students if s['percentage'] >= (passing_threshold_ratio * 100)),
+            'passing_threshold_ratio': passing_threshold_ratio,
+            'passing_threshold_pct': round(passing_threshold_ratio * 100, 1)
         }
     }
 

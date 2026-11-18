@@ -778,6 +778,54 @@ def test_reference_co_po_direct_indirect_and_reset():
     assert save_res.get_json()['success'] is True
 
 
+def test_custom_passing_threshold():
+    """Validates user-defined passing threshold calculation on page 2."""
+    client = app.test_client()
+    students = [
+        {'roll_no': '101', 'name': 'Aarav', 'marks': {'UT1': 11, 'UT2': 14}},  # 11/20 = 55%, 14/20 = 70%
+        {'roll_no': '102', 'name': 'Bhavna', 'marks': {'UT1': 9, 'UT2': 11}},   # 9/20 = 45%, 11/20 = 55%
+        {'roll_no': '103', 'name': 'Chetan', 'marks': {'UT1': 13, 'UT2': 16}}   # 13/20 = 65%, 16/20 = 80%
+    ]
+    col_configs = [
+        {'name': 'UT1', 'max_marks': 20.0, 'mapped_cos': ['CO1'], 'checked': True},
+        {'name': 'UT2', 'max_marks': 20.0, 'mapped_cos': ['CO2'], 'checked': True}
+    ]
+
+    # Test 1: With 50% threshold (passing mark = 10.0) -> Aarav & Chetan pass UT1
+    res_50 = client.post('/api/compute-direct', json={
+        'students': students,
+        'column_configs': col_configs,
+        'passing_threshold_ratio': 0.50
+    })
+    data_50 = res_50.get_json()['data']
+    ut1_50 = next(a for a in data_50['assessment_summaries'] if a['name'] == 'UT1')
+    assert ut1_50['passing_mark'] == 10.0
+    assert ut1_50['passed'] == 2
+
+    # Test 2: With 60% threshold (passing mark = 12.0) -> Only Chetan passes UT1
+    res_60 = client.post('/api/compute-direct', json={
+        'students': students,
+        'column_configs': col_configs,
+        'passing_threshold_pct': 60
+    })
+    data_60 = res_60.get_json()['data']
+    ut1_60 = next(a for a in data_60['assessment_summaries'] if a['name'] == 'UT1')
+    assert ut1_60['passing_mark'] == 12.0
+    assert ut1_60['passed'] == 1
+    assert data_60['passing_threshold_pct'] == 60.0
+
+    # Test 3: With 40% threshold (passing mark = 8.0) -> All 3 students pass UT1
+    res_40 = client.post('/api/compute-direct', json={
+        'students': students,
+        'column_configs': col_configs,
+        'passing_threshold_ratio': 0.40
+    })
+    data_40 = res_40.get_json()['data']
+    ut1_40 = next(a for a in data_40['assessment_summaries'] if a['name'] == 'UT1')
+    assert ut1_40['passing_mark'] == 8.0
+    assert ut1_40['passed'] == 3
+
+
 if __name__ == '__main__':
     test_gapc_attainment_formula()
     print("[PASS] test_gapc_attainment_formula")
@@ -817,4 +865,7 @@ if __name__ == '__main__':
     print("[PASS] test_sample_practical_marks_50_xlsx_upload")
     test_reference_co_po_direct_indirect_and_reset()
     print("[PASS] test_reference_co_po_direct_indirect_and_reset")
-    print("\nALL 19 TEST SUITES PASSED SUCCESSFULLY!")
+    test_custom_passing_threshold()
+    print("[PASS] test_custom_passing_threshold")
+
+    print("\nALL 20 TEST SUITES PASSED SUCCESSFULLY!")

@@ -57,6 +57,36 @@
       </div>
     </div>
 
+    <!-- Threshold Configuration Card (Before Uploading Records) -->
+    <div class="threshold-setup-card" style="background: linear-gradient(135deg, #f0fdf4 0%, #eff6ff 100%); border: 1.5px solid #3b82f6; border-radius: 8px; padding: 14px 18px; margin-bottom: 18px; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
+      <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 14px;">
+        <div>
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <span style="font-size: 20px;">🎯</span>
+            <strong style="font-size: 14.5px; color: #1e3a8a;">Student Passing Threshold Setting (Set Before Uploading Records)</strong>
+          </div>
+          <p style="font-size: 12.5px; color: #475569; margin: 4px 0 0 0;">
+            Please enter your passing mark threshold percentage for students. All assessment passing marks, CO attainments, and statistics will be calculated based on this threshold.
+          </p>
+        </div>
+        <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+          <label for="userThresholdInput" style="font-size: 13px; font-weight: 700; color: #1e3a8a; white-space: nowrap;">
+            Passing Threshold (%):
+          </label>
+          <div style="position: relative; display: inline-flex; align-items: center;">
+            <input type="number" id="userThresholdInput" class="form-control" style="width: 85px; font-weight: 700; font-size: 15px; text-align: center; border: 2px solid #2563eb; background: #ffffff; padding-right: 22px;" value="50" min="1" max="100" step="1" placeholder="50" oninput="onUserThresholdChange(this.value)">
+            <span style="position: absolute; right: 8px; font-weight: bold; color: #2563eb; pointer-events: none;">%</span>
+          </div>
+          <div class="threshold-presets" style="display: flex; gap: 4px;">
+            <button type="button" class="btn btn-outline btn-sm" onclick="setThresholdPreset(40)" title="Set to 40%">40%</button>
+            <button type="button" class="btn btn-outline btn-sm" onclick="setThresholdPreset(50)" title="Set to 50% (Standard GAPC/OBE)">50%</button>
+            <button type="button" class="btn btn-outline btn-sm" onclick="setThresholdPreset(60)" title="Set to 60%">60%</button>
+            <button type="button" class="btn btn-outline btn-sm" onclick="setThresholdPreset(75)" title="Set to 75%">75%</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- Upload Tabs -->
     <div class="tabs">
       <button type="button" class="tab-btn active" onclick="switchDirectTab('file')">Upload File (CSV, TSV, XLSX)</button>
@@ -113,12 +143,18 @@
       </div>
 
       <div class="flex-between">
-        <div style="display: flex; gap: 12px; align-items: center;">
-          <label style="font-size: 13px; font-weight: 600;">Passing Threshold Ratio:</label>
-          <select id="passingThresholdSelect" class="form-control" style="width: auto; padding: 4px 8px;">
+        <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+          <label style="font-size: 13px; font-weight: 700; color: #1e3a8a;">Passing Threshold:</label>
+          <div style="position: relative; display: inline-flex; align-items: center;">
+            <input type="number" id="configThresholdInput" class="form-control" style="width: 75px; padding: 4px 22px 4px 8px; font-weight: 700; text-align: center; border: 1.5px solid #2563eb;" value="50" min="1" max="100" step="1" oninput="syncThresholdFromConfig(this.value)">
+            <span style="position: absolute; right: 6px; font-weight: bold; color: #2563eb; pointer-events: none;">%</span>
+          </div>
+          <select id="passingThresholdSelect" class="form-control" style="width: auto; padding: 4px 8px;" onchange="syncThresholdFromSelect(this.value)">
             <option value="0.50" selected>50% of Maximum Marks (GAPC/OBE Standard)</option>
             <option value="0.40">40% of Maximum Marks</option>
             <option value="0.60">60% of Maximum Marks</option>
+            <option value="0.75">75% of Maximum Marks</option>
+            <option value="custom">Custom %</option>
           </select>
         </div>
         <div>
@@ -167,7 +203,7 @@
       </div>
       <div class="stat-card">
         <div class="stat-val" id="statDirectPassed">0</div>
-        <div class="stat-label">Students Passed (>=50%)</div>
+        <div class="stat-label" id="statPassedLabel">Students Passed (&ge;50%)</div>
       </div>
       <div class="stat-card">
         <div class="stat-val" id="statDirectAvgScore">0%</div>
@@ -204,19 +240,19 @@
         <div id="gapcGuideContent" style="display: none; margin-top: 10px; font-size: 12px; color: #334155;">
           <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 8px; margin-bottom: 10px;">
             <div style="background:#dcfce7; border: 1px solid #86efac; border-radius: 6px; padding: 6px 10px;">
-              <strong style="color:#166534;">Level 3:</strong> ≥80% students scoring ≥50% marks<br>
+              <strong style="color:#166534;">Level 3:</strong> ≥80% students scoring ≥<span class="gapc-threshold-pct">50%</span> marks<br>
               <span style="font-size:11px; color:#14532d;">Fixed Level: <strong>3.0</strong></span>
             </div>
             <div style="background:#e0f2fe; border: 1px solid #7dd3fc; border-radius: 6px; padding: 6px 10px;">
-              <strong style="color:#075985;">Level 2:</strong> 70% to &lt;80% students scoring ≥50%<br>
+              <strong style="color:#075985;">Level 2:</strong> 70% to &lt;80% students scoring ≥<span class="gapc-threshold-pct">50%</span><br>
               <span style="font-size:11px; color:#0c4a6e;">Level points: <strong>2.0 to 2.9</strong> (2 + (% - 70)/10)</span>
             </div>
             <div style="background:#fef9c3; border: 1px solid #fde047; border-radius: 6px; padding: 6px 10px;">
-              <strong style="color:#854d0e;">Level 1:</strong> 60% to &lt;70% students scoring ≥50%<br>
+              <strong style="color:#854d0e;">Level 1:</strong> 60% to &lt;70% students scoring ≥<span class="gapc-threshold-pct">50%</span><br>
               <span style="font-size:11px; color:#713f12;">Level points: <strong>1.0 to 1.9</strong> (1 + (% - 60)/10)</span>
             </div>
             <div style="background:#ffedd5; border: 1px solid #fed7aa; border-radius: 6px; padding: 6px 10px;">
-              <strong style="color:#9a3412;">Level 0-1:</strong> 0% to &lt;60% students scoring ≥50%<br>
+              <strong style="color:#9a3412;">Level 0-1:</strong> 0% to &lt;60% students scoring ≥<span class="gapc-threshold-pct">50%</span><br>
               <span style="font-size:11px; color:#7c2d12;">Level points: <strong>0.0 to 1.0</strong> ((% × 1)/60, not fixed to 0)</span>
             </div>
           </div>
@@ -273,7 +309,7 @@
               <th>Assessment Name</th>
               <th>Mapped COs</th>
               <th>Max Marks</th>
-              <th>Passing Mark (50%)</th>
+              <th id="thPassingMarkHeader">Passing Mark (50%)</th>
               <th>Appeared</th>
               <th>Passed</th>
               <th>Failed</th>
@@ -457,7 +493,7 @@
       <div class="graph-header">
         <div>
           <h4 class="graph-title">Graph 1: Students Passing Each Course Outcome (CO)</h4>
-          <p class="graph-subtitle">Count of students achieving &ge; 50% threshold on assessments mapped to each CO</p>
+          <p class="graph-subtitle" id="graph1COPassingSubtitle">Count of students achieving &ge; 50% threshold on assessments mapped to each CO</p>
         </div>
         <div>
           <span class="badge badge-level-2">Direct CO Passing Count</span>
@@ -722,6 +758,47 @@
       <a href="{{ url_for('page3_copo') }}" class="btn btn-primary btn-lg">
         Proceed to Step 3: CO-PO Mapping &rarr;
       </a>
+    </div>
+  </div>
+
+  <!-- Student Passing Threshold Confirmation Modal (Before Upload) -->
+  <div id="thresholdModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(15,23,42,0.65); z-index: 10000; align-items: center; justify-content: center; padding: 16px;">
+    <div class="card" style="max-width: 440px; width: 95%; background: #ffffff; padding: 0; border-radius: 12px; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.35); border: 1px solid #cbd5e1; overflow: hidden;">
+      <div style="background: linear-gradient(135deg, #1e40af, #3b82f6); color: #ffffff; padding: 16px 20px;">
+        <h3 style="margin: 0; font-size: 16px; font-weight: 700; display: flex; align-items: center; gap: 8px;">
+          <span>🎯</span> Set Student Passing Threshold
+        </h3>
+        <p style="margin: 4px 0 0 0; font-size: 12px; opacity: 0.95;">
+          Specify passing threshold percentage before parsing records
+        </p>
+      </div>
+      <div style="padding: 20px;">
+        <p style="font-size: 13.5px; color: #334155; margin-top: 0; margin-bottom: 14px; line-height: 1.5;">
+          Please enter the minimum percentage of marks required for a student to pass each Assessment &amp; Course Outcome:
+        </p>
+        <div style="background: #f8fafc; border: 1.5px solid #cbd5e1; border-radius: 8px; padding: 12px; margin-bottom: 16px;">
+          <div style="display: flex; align-items: center; justify-content: space-between; gap: 10px;">
+            <label for="modalThresholdInput" style="font-weight: 700; font-size: 13.5px; color: #1e293b;">Passing Threshold (%):</label>
+            <div style="position: relative; display: inline-flex; align-items: center;">
+              <input type="number" id="modalThresholdInput" class="form-control" style="width: 85px; font-weight: 700; font-size: 16px; text-align: center; border: 2px solid #2563eb; padding-right: 22px;" value="50" min="1" max="100" step="1">
+              <span style="position: absolute; right: 8px; font-weight: bold; color: #2563eb; pointer-events: none;">%</span>
+            </div>
+          </div>
+          <div style="display: flex; gap: 6px; margin-top: 10px; justify-content: flex-end; align-items: center;">
+            <span style="font-size: 11.5px; color: #64748b; margin-right: auto;">Quick select:</span>
+            <button type="button" class="btn btn-outline btn-sm" onclick="setModalThreshold(40)">40%</button>
+            <button type="button" class="btn btn-outline btn-sm" onclick="setModalThreshold(50)">50% (Standard)</button>
+            <button type="button" class="btn btn-outline btn-sm" onclick="setModalThreshold(60)">60%</button>
+            <button type="button" class="btn btn-outline btn-sm" onclick="setModalThreshold(75)">75%</button>
+          </div>
+        </div>
+        <div style="display: flex; justify-content: flex-end; gap: 10px;">
+          <button type="button" class="btn btn-outline" onclick="closeThresholdModal()">Cancel</button>
+          <button type="button" class="btn btn-primary" onclick="confirmThresholdAndProceed()" style="font-weight: 700; background: #2563eb; border-color: #2563eb;">
+            ✓ Confirm &amp; Parse Records
+          </button>
+        </div>
+      </div>
     </div>
   </div>
 

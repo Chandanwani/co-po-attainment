@@ -621,7 +621,13 @@ def api_compute_direct():
     
     students = data.get('students', [])
     column_configs = data.get('column_configs', [])
-    passing_threshold_ratio = float(data.get('passing_threshold_ratio', 0.50))
+    passing_threshold_ratio = data.get('passing_threshold_ratio')
+    if passing_threshold_ratio is None and 'passing_threshold_pct' in data:
+        passing_threshold_ratio = float(data['passing_threshold_pct']) / 100.0
+    elif passing_threshold_ratio is not None:
+        passing_threshold_ratio = float(passing_threshold_ratio)
+    else:
+        passing_threshold_ratio = 0.50
 
     result = validate_and_compute_direct(students, column_configs, passing_threshold_ratio)
     if result['success']:

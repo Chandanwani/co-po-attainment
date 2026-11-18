@@ -81,6 +81,161 @@ function handleWeightChange() {
 }
 
 // =========================================================================
+// THRESHOLD MANAGEMENT (PAGE 2 PRACTICAL)
+// =========================================================================
+
+let currentThresholdPct = 50;
+let pendingUploadAction = null;
+
+function getActiveThresholdPct() {
+  const inp = document.getElementById('userThresholdInput');
+  if (inp && inp.value) {
+    const val = parseFloat(inp.value);
+    if (!isNaN(val) && val > 0 && val <= 100) return val;
+  }
+  const cfgInp = document.getElementById('configThresholdInput');
+  if (cfgInp && cfgInp.value) {
+    const val = parseFloat(cfgInp.value);
+    if (!isNaN(val) && val > 0 && val <= 100) return val;
+  }
+  const sel = document.getElementById('passingThresholdSelect');
+  if (sel && sel.value && sel.value !== 'custom') {
+    const val = parseFloat(sel.value);
+    if (!isNaN(val) && val > 0) return Math.round(val * 100);
+  }
+  return currentThresholdPct || 50;
+}
+
+function onUserThresholdChange(val) {
+  const num = parseFloat(val);
+  if (!isNaN(num) && num > 0 && num <= 100) {
+    currentThresholdPct = num;
+    syncThresholdUI(num);
+  }
+}
+
+function setThresholdPreset(val) {
+  currentThresholdPct = val;
+  const inp = document.getElementById('userThresholdInput');
+  if (inp) inp.value = val;
+  const mInp = document.getElementById('modalThresholdInput');
+  if (mInp) mInp.value = val;
+  syncThresholdUI(val);
+}
+
+function setModalThreshold(val) {
+  const mInp = document.getElementById('modalThresholdInput');
+  if (mInp) mInp.value = val;
+}
+
+function syncThresholdFromConfig(val) {
+  const num = parseFloat(val);
+  if (!isNaN(num) && num > 0 && num <= 100) {
+    currentThresholdPct = num;
+    const inp = document.getElementById('userThresholdInput');
+    if (inp) inp.value = num;
+    syncThresholdSelect(num);
+    updateDynamicThresholdLabels(num);
+  }
+}
+
+function syncThresholdFromSelect(val) {
+  if (val === 'custom') {
+    const cfgInp = document.getElementById('configThresholdInput');
+    if (cfgInp) cfgInp.focus();
+    return;
+  }
+  const ratio = parseFloat(val);
+  if (!isNaN(ratio) && ratio > 0) {
+    const pct = Math.round(ratio * 100);
+    currentThresholdPct = pct;
+    const inp = document.getElementById('userThresholdInput');
+    if (inp) inp.value = pct;
+    const cfgInp = document.getElementById('configThresholdInput');
+    if (cfgInp) cfgInp.value = pct;
+    updateDynamicThresholdLabels(pct);
+  }
+}
+
+function syncThresholdUI(pct) {
+  const cfgInp = document.getElementById('configThresholdInput');
+  if (cfgInp) cfgInp.value = pct;
+  syncThresholdSelect(pct);
+  updateDynamicThresholdLabels(pct);
+}
+
+function syncThresholdSelect(pct) {
+  const sel = document.getElementById('passingThresholdSelect');
+  if (!sel) return;
+  const ratio = (pct / 100).toFixed(2);
+  let matched = false;
+  for (let opt of sel.options) {
+    if (parseFloat(opt.value).toFixed(2) === ratio) {
+      sel.value = opt.value;
+      matched = true;
+      break;
+    }
+  }
+  if (!matched) {
+    sel.value = 'custom';
+  }
+}
+
+function updateDynamicThresholdLabels(pct) {
+  // Update stat label
+  const statLabel = document.getElementById('statPassedLabel');
+  if (statLabel) statLabel.textContent = `Students Passed (>=${pct}%)`;
+
+  // Update table header
+  const thPassing = document.getElementById('thPassingMarkHeader');
+  if (thPassing) thPassing.textContent = `Passing Mark (${pct}%)`;
+
+  // Update Graph subtitle if exists
+  const gSub = document.getElementById('graph1COPassingSubtitle');
+  if (gSub) {
+    gSub.textContent = `Percentage of students achieving ≥ ${pct}% threshold on experiments mapped to each CO`;
+  }
+}
+
+function requestThresholdAndProceed(actionFn) {
+  pendingUploadAction = actionFn;
+  const current = getActiveThresholdPct();
+  const mInp = document.getElementById('modalThresholdInput');
+  if (mInp) mInp.value = current;
+  const modal = document.getElementById('thresholdModal');
+  if (modal) {
+    modal.style.display = 'flex';
+  } else {
+    if (actionFn) actionFn();
+  }
+}
+
+function closeThresholdModal() {
+  const modal = document.getElementById('thresholdModal');
+  if (modal) modal.style.display = 'none';
+  pendingUploadAction = null;
+}
+
+function confirmThresholdAndProceed() {
+  const mInp = document.getElementById('modalThresholdInput');
+  let pct = parseFloat(mInp ? mInp.value : 50);
+  if (isNaN(pct) || pct <= 0 || pct > 100) {
+    alert('Please enter a valid threshold percentage between 1 and 100.');
+    return;
+  }
+  currentThresholdPct = pct;
+  const inp = document.getElementById('userThresholdInput');
+  if (inp) inp.value = pct;
+  syncThresholdUI(pct);
+  closeThresholdModal();
+  if (pendingUploadAction) {
+    const action = pendingUploadAction;
+    pendingUploadAction = null;
+    action();
+  }
+}
+
+// =========================================================================
 // DIRECT LAB MARKS UPLOAD & PARSING
 // =========================================================================
 
@@ -90,9 +245,11 @@ async function uploadDirectFile() {
     showDirectError('Please select a file to upload.');
     return;
   }
-  const formData = new FormData();
-  formData.append('file', fileInput.files[0]);
-  await sendDirectParseRequest(formData);
+  requestThresholdAndProceed(async () => {
+    const formData = new FormData();
+    formData.append('file', fileInput.files[0]);
+    await sendDirectParseRequest(formData);
+  });
 }
 
 async function uploadDirectPasted() {
@@ -101,9 +258,11 @@ async function uploadDirectPasted() {
     showDirectError('Please paste spreadsheet data into the text box.');
     return;
   }
-  const formData = new FormData();
-  formData.append('pasted_text', text);
-  await sendDirectParseRequest(formData);
+  requestThresholdAndProceed(async () => {
+    const formData = new FormData();
+    formData.append('pasted_text', text);
+    await sendDirectParseRequest(formData);
+  });
 }
 
 async function sendDirectParseRequest(formData) {
@@ -196,6 +355,12 @@ function buildPracticalSheetFromScratch() {
     return;
   }
 
+  requestThresholdAndProceed(() => {
+    executeBuildPracticalSheetFromScratch(expCount);
+  });
+}
+
+function executeBuildPracticalSheetFromScratch(expCount) {
   const expMax = parseFloat(document.getElementById('scratchExpMaxMarks').value) || 25;
 
   // 1. Build Column Configs reading the user's entered CO for each experiment
@@ -698,10 +863,14 @@ function collectDirectDataFromUI() {
     });
   });
 
+  const thPct = getActiveThresholdPct();
+  const passing_threshold_ratio = thPct / 100.0;
+
   return {
     students: students,
     column_configs: updatedConfigs,
-    passing_threshold_ratio: parseFloat(document.getElementById('passingThresholdSelect').value) || 0.50
+    passing_threshold_ratio: passing_threshold_ratio,
+    passing_threshold_pct: thPct
   };
 }
 
@@ -767,6 +936,9 @@ function displayDirectResults(data) {
   document.getElementById('statDirectPassed').textContent = `${passed} (${passPct}%)`;
   document.getElementById('statDirectAvgScore').textContent = `${avgPct}%`;
   document.getElementById('statDirectCOCount').textContent = data.all_cos ? data.all_cos.length : (data.co_summaries ? data.co_summaries.length : 0);
+
+  const thPct = data.passing_threshold_pct || getActiveThresholdPct();
+  updateDynamicThresholdLabels(thPct);
 
   // Direct CO Summary Table
   const tbodyCO = document.getElementById('directCOSummaryTable').querySelector('tbody');
@@ -854,14 +1026,15 @@ function renderDirectCharts(data) {
   // Chart 3: Score Distribution
   const dist = [0, 0, 0, 0];
   const studentsList = data.students || data.students_summary || [];
+  const th = data.passing_threshold_pct || getActiveThresholdPct();
   studentsList.forEach(s => {
     const p = s.percentage;
-    if (p < 50) dist[0]++;
+    if (p < th) dist[0]++;
     else if (p < 65) dist[1]++;
     else if (p < 80) dist[2]++;
     else dist[3]++;
   });
-  renderDoughnutChart('chartScoreDistribution', ['< 50% (Fail)', '50% - 64%', '65% - 79%', '≥ 80% (Distinction)'], dist, ['#ef4444', '#f59e0b', '#3b82f6', '#10b981']);
+  renderDoughnutChart('chartScoreDistribution', [`< ${th}% (Below Threshold)`, `${th}% - 64%`, '65% - 79%', '≥ 80% (Distinction)'], dist, ['#ef4444', '#f59e0b', '#3b82f6', '#10b981']);
 
   // Chart 4: Assessment Passing Rates
   const assessNames = (data.assessment_summaries || []).map(a => a.name);
