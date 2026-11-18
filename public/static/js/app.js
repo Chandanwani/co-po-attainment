@@ -77,7 +77,6 @@ function handleWeightChange() {
 // =========================================================================
 
 let currentThresholdPct = 50;
-let pendingUploadAction = null;
 
 function getActiveThresholdPct() {
   const inp = document.getElementById('userThresholdInput');
@@ -104,20 +103,6 @@ function onUserThresholdChange(val) {
     currentThresholdPct = num;
     syncThresholdUI(num);
   }
-}
-
-function setThresholdPreset(val) {
-  currentThresholdPct = val;
-  const inp = document.getElementById('userThresholdInput');
-  if (inp) inp.value = val;
-  const mInp = document.getElementById('modalThresholdInput');
-  if (mInp) mInp.value = val;
-  syncThresholdUI(val);
-}
-
-function setModalThreshold(val) {
-  const mInp = document.getElementById('modalThresholdInput');
-  if (mInp) mInp.value = val;
 }
 
 function syncThresholdFromConfig(val) {
@@ -194,44 +179,6 @@ function updateDynamicThresholdLabels(pct) {
   }
 }
 
-function requestThresholdAndProceed(actionFn) {
-  pendingUploadAction = actionFn;
-  const current = getActiveThresholdPct();
-  const mInp = document.getElementById('modalThresholdInput');
-  if (mInp) mInp.value = current;
-  const modal = document.getElementById('thresholdModal');
-  if (modal) {
-    modal.style.display = 'flex';
-  } else {
-    if (actionFn) actionFn();
-  }
-}
-
-function closeThresholdModal() {
-  const modal = document.getElementById('thresholdModal');
-  if (modal) modal.style.display = 'none';
-  pendingUploadAction = null;
-}
-
-function confirmThresholdAndProceed() {
-  const mInp = document.getElementById('modalThresholdInput');
-  let pct = parseFloat(mInp ? mInp.value : 50);
-  if (isNaN(pct) || pct <= 0 || pct > 100) {
-    alert('Please enter a valid threshold percentage between 1 and 100.');
-    return;
-  }
-  currentThresholdPct = pct;
-  const inp = document.getElementById('userThresholdInput');
-  if (inp) inp.value = pct;
-  syncThresholdUI(pct);
-  closeThresholdModal();
-  if (pendingUploadAction) {
-    const action = pendingUploadAction;
-    pendingUploadAction = null;
-    action();
-  }
-}
-
 // =========================================================================
 // DIRECT MARKS LOGIC
 // =========================================================================
@@ -242,11 +189,9 @@ async function uploadDirectFile() {
     showDirectError('Please select a file to upload.');
     return;
   }
-  requestThresholdAndProceed(async () => {
-    const formData = new FormData();
-    formData.append('file', fileInput.files[0]);
-    await sendDirectParseRequest(formData);
-  });
+  const formData = new FormData();
+  formData.append('file', fileInput.files[0]);
+  await sendDirectParseRequest(formData);
 }
 
 async function uploadDirectPasted() {
@@ -255,13 +200,10 @@ async function uploadDirectPasted() {
     showDirectError('Please paste spreadsheet data into the text box.');
     return;
   }
-  requestThresholdAndProceed(async () => {
-    const formData = new FormData();
-    formData.append('pasted_text', text);
-    await sendDirectParseRequest(formData);
-  });
+  const formData = new FormData();
+  formData.append('pasted_text', text);
+  await sendDirectParseRequest(formData);
 }
-
 
 async function sendDirectParseRequest(formData) {
   hideDirectAlerts();
@@ -281,10 +223,11 @@ async function sendDirectParseRequest(formData) {
     document.getElementById('columnConfigSection').style.display = 'block';
     document.getElementById('directTableSection').style.display = 'block';
     
-    // Display guidance and success alert
-    showDirectSuccess(`Data parsed successfully: ${result.students.length} students and ${result.column_configs.length} assessment columns loaded in sequence. Please verify/adjust the Maximum Marks and CO mappings above, then click "Validate & Calculate Direct Attainment".`);
+    // Automatically calculate all things with selected threshold
+    await calculateDirectAttainment();
+
+    showDirectSuccess(`Data parsed successfully: ${result.students.length} students and ${result.column_configs.length} assessment columns loaded.`);
     
-    // Smooth scroll to column configuration setup so user sees Max Marks
     setTimeout(() => {
       document.getElementById('columnConfigSection').scrollIntoView({ behavior: 'smooth', block: 'start' });
     }, 100);
